@@ -88,7 +88,7 @@ export default function DashboardCliente({ onLogout, clienteNome = "Cliente SS",
   const [propertySearch, setPropertySearch] = useState('');
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
   const [showInterestForm, setShowInterestForm] = useState(false);
-  const [interestForm, setInterestForm] = useState({ nome: '', telefone: '' });
+  const [interestForm, setInterestForm] = useState({ nome: '', telefone: '', email: '' });
   const availableProperties = todosImoveis.filter(p => 
     p.status === 'DISPONÍVEL' && 
     (p.nome.toLowerCase().includes(propertySearch.toLowerCase()) || 
@@ -345,6 +345,13 @@ export default function DashboardCliente({ onLogout, clienteNome = "Cliente SS",
                           onChange={e => setInterestForm({...interestForm, nome: e.target.value})}
                         />
                         <input 
+                          type="email" 
+                          placeholder="Seu E-mail" 
+                          className="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 ring-blue-500"
+                          value={interestForm.email}
+                          onChange={e => setInterestForm({...interestForm, email: e.target.value})}
+                        />
+                        <input 
                           type="text" 
                           placeholder="DDD + Telefone" 
                           className="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 ring-blue-500"
@@ -357,8 +364,11 @@ export default function DashboardCliente({ onLogout, clienteNome = "Cliente SS",
                             fetch('/api/interesse', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({
                               imovelId: selectedProperty.id,
                               imovelNome: selectedProperty.nome,
+                              imovelValor: selectedProperty.valor,
+                              imovelLocalizacao: selectedProperty.localizacao,
                               nome: interestForm.nome,
-                              telefone: interestForm.telefone
+                              telefone: interestForm.telefone,
+                              email: interestForm.email
                             })}).catch(e=>{});
                             alert("Interesse registrado! Entraremos em contato.");
                             setShowInterestForm(false);

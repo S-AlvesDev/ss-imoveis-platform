@@ -40,20 +40,10 @@ const window = dom.window;
 const DOMPurify = createDOMPurify(window as any);
 const JWT_SECRET = process.env.JWT_SECRET || 'afefde38-f16e-44de-ab2f-4fb4d50af7b1';
 
-// Setup Multer Storage
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const dir = path.join(process.cwd(), 'public', 'media');
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    cb(null, dir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
-  }
-});
+import sharp from 'sharp';
+
+// Setup Multer Storage (Memory storage to allow sharp compression)
+const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 async function startServer() {
@@ -254,6 +244,66 @@ async function startServer() {
 
   const verificationCodes = new Map<string, { code: string, expiry: number }>();
 
+  const passwordResetCodes = new Map<string, { code: string, expiry: number }>();
+
+  app.post('/api/auth/reset-password-request', async (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'E-mail obrigatório' });
+    
+    // check if it's client or user
+    const { data: client } = await supabaseServer.from('clients').select('id').eq('email', email).maybeSingle();
+    const { data: user } = await supabaseServer.from('users').select('id').eq('matricula', email).maybeSingle(); // For employees email is normally matricula or we don't have it? Wait, users have matricula, but maybe no email.
+
+    if (!client && !user) {
+      return res.status(404).json({ error: 'Conta não encontrada.' });
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    passwordResetCodes.set(email, { code, expiry: Date.now() + 15 * 60 * 1000 });
+
+    try {
+      const tp = await getTransporter();
+      await tp.sendMail({
+          from: '"SS Imóveis" <no-reply@ssimoveis.com>',
+          to: email,
+          subject: 'Recuperação de Senha',
+          html: `<p>Seu código para recuperar a senha é: <strong>${code}</strong></p><p>Ele expira em 15 minutos.</p>`
+      });
+      res.json({ message: 'Código enviado por e-mail.' });
+    } catch(e) {
+      res.status(500).json({ error: 'Erro ao enviar e-mail de recuperação.' });
+    }
+  });
+
+  app.post('/api/auth/reset-password', async (req, res) => {
+    const { email, code, newPassword } = req.body;
+    const entry = passwordResetCodes.get(email);
+    if (!entry || entry.code !== code || Date.now() > entry.expiry) {
+       return res.status(400).json({ error: 'Código inválido ou expirado.' });
+    }
+    
+    // check client
+    const { data: client } = await supabaseServer.from('clients').select('id').eq('email', email).maybeSingle();
+    let updated = false;
+    if (client) {
+       await supabaseServer.from('clients').update({ password: newPassword }).eq('id', client.id);
+       updated = true;
+    } else {
+       const { data: user } = await supabaseServer.from('users').select('id').eq('matricula', email).maybeSingle();
+       if (user) {
+         await supabaseServer.from('users').update({ password: newPassword }).eq('id', user.id);
+         updated = true;
+       }
+    }
+
+    if (updated) {
+       passwordResetCodes.delete(email);
+       res.json({ success: true, message: 'Senha atualizada com sucesso.' });
+    } else {
+       res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+  });
+
   app.post('/api/auth/send-code', async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'E-mail obrigatório' });
@@ -381,18 +431,17 @@ async function startServer() {
   });
 
   app.post('/api/staff', async (req, res) => {
-    const { nome, senha, role } = req.body;
+    const { nome, email, matricula, senha, role } = req.body;
     console.log(`[Staff API] Cadastrando: ${nome}, Role: ${role}`);
-    const year = new Date().getFullYear();
     
-    // Get count for matricula
-    const { count } = await supabaseServer.from('users').select('*', { count: 'exact', head: true });
-    const nextIdNum = (count || 0) + 1;
-    const prefix = role === 'ALMOXARIFADO' ? 'E' : '';
-    const matricula = `${prefix}${year}${String(nextIdNum).padStart(4, '0')}`;
+    // Ensure matricula is provided
+    if (!matricula) {
+        return res.status(400).json({ error: 'Matrícula é obrigatória.' });
+    }
     
     const { data: newUser, error } = await supabaseServer.from('users').insert({
         nome,
+        email,
         matricula,
         role: role || 'CORRETOR_ATENDIMENTO',
         senha
@@ -548,10 +597,72 @@ async function startServer() {
     res.json({ ...contract, status: 'DISTRATADO', distrato: updatedDistrato });
   });
 
+  app.post('/api/interesse', async (req, res) => {
+    const { imovelId, imovelNome, imovelValor, imovelLocalizacao, nome, telefone, email } = req.body;
+    try {
+       const tp = await getTransporter();
+       
+       // Alert admin
+       await tp.sendMail({
+           from: '"SS Imóveis" <no-reply@ssimoveis.com>',
+           to: process.env.ADMIN_EMAIL || 'admin@ssimoveis.com',
+           subject: 'Novo Lead Recebido!',
+           html: `<h2>Novo Interesse em Imóvel</h2>
+                  <p><strong>Cliente:</strong> ${nome}</p>
+                  <p><strong>Telefone:</strong> ${telefone}</p>
+                  <p><strong>E-mail:</strong> ${email || 'Não informado'}</p>
+                  <p><strong>Imóvel:</strong> ${imovelNome} (ID: ${imovelId})</p>`
+       });
+
+       // Send technical sheet to client if email is provided
+       if (email) {
+           await tp.sendMail({
+               from: '"SS Imóveis" <no-reply@ssimoveis.com>',
+               to: email,
+               subject: `Detalhes do Imóvel: ${imovelNome}`,
+               html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+                        <h2>Olá, ${nome}!</h2>
+                        <p>Obrigado pelo seu interesse no imóvel <strong>${imovelNome}</strong>.</p>
+                        <hr style="border: 1px solid #eee; margin: 20px 0;" />
+                        <h3>Ficha Técnica</h3>
+                        <p><strong>Nome:</strong> ${imovelNome}</p>
+                        <p><strong>Localização:</strong> ${imovelLocalizacao || 'Não informada'}</p>
+                        <p><strong>Valor Estimado:</strong> R$ ${Number(imovelValor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        <hr style="border: 1px solid #eee; margin: 20px 0;" />
+                        <p>Nossa equipe entrará em contato com você em breve através do telefone ${telefone} para agendar uma visita e tirar suas dúvidas.</p>
+                        <p>Atenciosamente,</p>
+                        <p><strong>Equipe SS Imóveis</strong></p>
+                      </div>`
+           });
+       }
+
+       res.json({ success: true });
+    } catch(err: any) {
+       console.error('[Email] Erro ao enviar email de lead', err);
+       res.status(500).json({ error: 'Erro ao notificar' });
+    }
+  });
+
   app.post('/api/properties', upload.array('images', 10), async (req, res) => {
     const { nome, valor, localizacao, descricao } = req.body;
     const files = req.files as Express.Multer.File[];
-    const imageUrls = files ? files.map(file => `/media/${file.filename}`) : [];
+    
+    // Process and compress images
+    const dir = path.join(process.cwd(), 'public', 'media');
+    if (!require('fs').existsSync(dir)) require('fs').mkdirSync(dir, { recursive: true });
+    
+    const imageUrls: string[] = [];
+    if (files && files.length > 0) {
+       for (const file of files) {
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9) + '.webp';
+          const outPath = path.join(dir, uniqueSuffix);
+          await sharp(file.buffer)
+            .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+            .webp({ quality: 80 })
+            .toFile(outPath);
+          imageUrls.push(`/media/${uniqueSuffix}`);
+       }
+    }
     
     let finalDesc = (descricao || 'Sem descrição detalhada');
     if (imageUrls.length > 0) {
@@ -812,10 +923,23 @@ async function startServer() {
     res.json({ success: true, count: affectedContracts.length });
   });
 
-  app.post('/api/contracts', async (req, res) => {
+  app.post('/api/contracts', upload.array('files', 5), async (req, res) => {
     console.log('[API] Registrando contrato:', req.body);
     const { clientId, propertyId, valorImovel, valorEntrada, taxaJuros, numParcelas, tipoAmortizacao, dataInicio, corretorMatricula, tipoContrato } = req.body;
     
+    const files = req.files as Express.Multer.File[];
+    const pdfUrls: string[] = [];
+    if (files && files.length > 0) {
+       const dir = path.join(process.cwd(), 'public', 'media');
+       if (!require('fs').existsSync(dir)) require('fs').mkdirSync(dir, { recursive: true });
+       for (const file of files) {
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9) + '.pdf';
+          const outPath = path.join(dir, uniqueSuffix);
+          require('fs').writeFileSync(outPath, file.buffer);
+          pdfUrls.push(`/media/${uniqueSuffix}`);
+       }
+    }
+
     if (!clientId || !propertyId || !corretorMatricula) {
       return res.status(400).json({ error: 'Cliente, Imóvel e Corretor são obrigatórios' });
     }
@@ -825,9 +949,9 @@ async function startServer() {
     let installments = [];
     try {
       if (tipoAmortizacao === AmortizationType.SAC) {
-        installments = calculateSAC(financedAmount, taxaJuros, numParcelas, dataInicio);
+        installments = calculateSAC(financedAmount, Number(taxaJuros), Number(numParcelas), dataInicio);
       } else {
-        installments = calculatePrice(financedAmount, taxaJuros, numParcelas, dataInicio);
+        installments = calculatePrice(financedAmount, Number(taxaJuros), Number(numParcelas), dataInicio);
       }
     } catch (calcErr: any) {
       console.error('[Amortization Error]', calcErr);
@@ -837,7 +961,7 @@ async function startServer() {
     const statusFinanceiro = 'Em Pagamento';
     const finalTipoContrato = tipoContrato || 'VENDA';
 
-    const { data: newContract, error } = await supabaseServer.from('contracts').insert({
+    const insertData: any = {
       client_id: Number(clientId),
       property_id: Number(propertyId),
       valor_imovel: Number(valorImovel),
@@ -852,7 +976,13 @@ async function startServer() {
       data_contrato: new Date().toISOString(),
       tipo_contrato: finalTipoContrato,
       status_financeiro: statusFinanceiro
-    }).select().maybeSingle();
+    };
+
+    if (pdfUrls.length > 0) {
+       insertData.distrato = { pdfs: pdfUrls }; // Temporary use of 'distrato' column to skip db schema changes
+    }
+
+    const { data: newContract, error } = await supabaseServer.from('contracts').insert(insertData).select().maybeSingle();
 
     if (error) {
       console.error('[Supabase Contract Insert Error] Full Error:', JSON.stringify(error, null, 2));
@@ -976,6 +1106,28 @@ async function startServer() {
           }).select().maybeSingle();
 
           if (movErr) throw movErr;
+
+          // Alert low stock
+          if (tipo_operacao === 'SAIDA' && novocSaldo < mat.estoque_minimo) {
+            try {
+                const tp = await getTransporter();
+                await tp.sendMail({
+                    from: '"SS Imóveis" <no-reply@ssimoveis.com>',
+                    to: process.env.ADMIN_EMAIL || 'admin@ssimoveis.com',
+                    subject: `Alerta de Estoque: ${mat.nome}`,
+                    html: `<h3>Alerta de Estoque Mínimo Atingido</h3>
+                           <p>O material <strong>${mat.nome}</strong> atingiu um nível abaixo do mínimo configurado.</p>
+                           <ul>
+                             <li><strong>Saldo Atual:</strong> ${novocSaldo} ${mat.unidade_medida}s</li>
+                             <li><strong>Estoque Mínimo:</strong> ${mat.estoque_minimo} ${mat.unidade_medida}s</li>
+                             <li><strong>Última Retirada:</strong> ${quantidade} ${mat.unidade_medida}s (por ${funcionario_matricula})</li>
+                           </ul>`
+                });
+            } catch(e) {
+                console.error('[Email] Falha ao enviar alerta de estoque:', e);
+            }
+          }
+
           res.json({ success: true, material_id: id, novoSaldo: novocSaldo });
       } catch (err: any) {
           // Fallback
