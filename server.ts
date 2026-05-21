@@ -19,7 +19,7 @@ async function getTransporter() {
   if (transporter) return transporter;
   if (process.env.SMTP_USER && process.env.SMTP_PASS) {
       transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST || 'smtp.gmail.com',
+          host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',
           port: parseInt(process.env.SMTP_PORT || '587'),
           secure: process.env.SMTP_SECURE === 'true' || parseInt(process.env.SMTP_PORT || '587') === 465,
           auth: {
@@ -31,7 +31,7 @@ async function getTransporter() {
           }
       });
       
-      console.log(`[Configuração SMTP] Conectando ao host: ${process.env.SMTP_HOST || 'smtp.gmail.com'} na porta: ${process.env.SMTP_PORT || '587'}`);
+      console.log(`[Configuração SMTP] Conectando ao host: ${process.env.SMTP_HOST || 'smtp-relay.brevo.com'} na porta: ${process.env.SMTP_PORT || '587'}`);
       return transporter;
   }
   

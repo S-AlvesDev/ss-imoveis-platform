@@ -269,9 +269,11 @@ export default function App() {
         toast.success(body.message + (body.devCode ? `\n(Simulação do Email: O código é ${body.devCode})` : ''));
       } else {
         setLoginError(body.error || 'Erro ao enviar código.');
+        toast.error(body.error || 'Erro ao enviar código.');
       }
     } catch (err) {
       setLoginError('Problema de conexão, tente novamente.');
+      toast.error('Problema de conexão, tente novamente.');
     }
   };
 
@@ -290,6 +292,7 @@ export default function App() {
       setResendCountdown(15);
     } catch (err: any) {
       setLoginError(err.message);
+      toast.error(err.message);
     }
   };
 
@@ -311,9 +314,11 @@ export default function App() {
         setRegisterForm({ nome: '', email: '', telefone: '', senha: '' });
       } else {
         setLoginError(body.error || 'Erro ao realizar cadastro.');
+        toast.error(body.error || 'Erro ao realizar cadastro.');
       }
     } catch (err) {
       setLoginError('Erro ao conectar ao servidor.');
+      toast.error('Erro ao conectar ao servidor.');
     }
   };
 
