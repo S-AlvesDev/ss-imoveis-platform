@@ -270,13 +270,17 @@ async function startServer() {
 
     try {
       const tp = await getTransporter();
-      await tp.sendMail({
-          from: '"SS Imóveis" <no-reply@ssimoveis.com>',
+      tp.sendMail({
+          from: '"SS Imóveis" <' + (process.env.SMTP_FROM_EMAIL || 'nao-responda@ssimoveis.com') + '>',
           to: targetEmail,
           subject: 'Recuperação de Senha',
           html: `<p>Seu código para recuperar a senha é: <strong>${code}</strong></p><p>Ele expira em 15 minutos.</p>`
+      }).catch(err => console.error('[Mail Error Background]', err));
+      
+      res.json({ 
+        message, 
+        devCode: (!process.env.SMTP_USER && process.env.NODE_ENV !== 'production') ? code : undefined 
       });
-      res.json({ message });
     } catch(e) {
       console.error('[Mail Error]', e);
       res.json({ 
@@ -332,7 +336,7 @@ async function startServer() {
       
       try {
         const mailTransporter = await getTransporter();
-        const info = await mailTransporter.sendMail({
+        mailTransporter.sendMail({
           from: '"SS Imóveis" <' + (process.env.SMTP_FROM_EMAIL || 'nao-responda@ssimoveis.com') + '>',
           to: email,
           subject: 'Seu código de verificação - SS Imóveis',
@@ -346,15 +350,11 @@ async function startServer() {
                    </div>
                    <p style="color: #64748b; font-size: 14px; margin-bottom: 0;">Este código expira em 10 minutos.</p>
                  </div>`
-        });
-        console.log(`[Email] Mensagem enviada para ${email}: ${info.messageId}`);
-        const testUrl = nodemailer.getTestMessageUrl(info);
-        if (testUrl) {
-          console.log(`[Email] URL de visualização (Teste Ethereal): ${testUrl}`);
-        }
+        }).then(info => {
+          console.log(`[Email] Mensagem enviada para ${email}: ${info.messageId}`);
+        }).catch((err: any) => console.error('[Email Erro Background]', err));
       } catch (emailErr: any) {
-        console.error('[Email Erro] Falha ao enviar email:', emailErr);
-        return res.status(500).json({ error: `Erro ao enviar email: ${emailErr.message}` });
+        console.error('[Email Setup Erro]', emailErr);
       }
       
       res.json({ 
