@@ -21,11 +21,17 @@ async function getTransporter() {
       transporter = nodemailer.createTransport({
           host: process.env.SMTP_HOST || 'smtp.gmail.com',
           port: parseInt(process.env.SMTP_PORT || '587'),
-          secure: process.env.SMTP_SECURE === 'true',
+          secure: process.env.SMTP_SECURE === 'true' || parseInt(process.env.SMTP_PORT || '587') === 465,
           auth: {
               user: process.env.SMTP_USER,
               pass: process.env.SMTP_PASS,
           },
+          connectionTimeout: 10000,
+          greetingTimeout: 5000,
+          socketTimeout: 10000,
+          tls: {
+             rejectUnauthorized: false
+          }
       });
       return transporter;
   }
@@ -270,23 +276,20 @@ async function startServer() {
 
     try {
       const tp = await getTransporter();
-      tp.sendMail({
+      await tp.sendMail({
           from: '"SS Imóveis" <' + (process.env.SMTP_FROM_EMAIL || 'nao-responda@ssimoveis.com') + '>',
           to: targetEmail,
           subject: 'Recuperação de Senha',
           html: `<p>Seu código para recuperar a senha é: <strong>${code}</strong></p><p>Ele expira em 15 minutos.</p>`
-      }).catch(err => console.error('[Mail Error Background]', err));
+      });
       
       res.json({ 
         message, 
         devCode: (!process.env.SMTP_USER && process.env.NODE_ENV !== 'production') ? code : undefined 
       });
-    } catch(e) {
+    } catch(e: any) {
       console.error('[Mail Error]', e);
-      res.json({ 
-        message, 
-        devCode: (!process.env.SMTP_USER && process.env.NODE_ENV !== 'production') ? code : undefined 
-      });
+      res.status(500).json({ error: 'Erro ao enviar e-mail de recuperação: ' + e.message });
     }
   });
 
@@ -336,7 +339,7 @@ async function startServer() {
       
       try {
         const mailTransporter = await getTransporter();
-        mailTransporter.sendMail({
+        await mailTransporter.sendMail({
           from: '"SS Imóveis" <' + (process.env.SMTP_FROM_EMAIL || 'nao-responda@ssimoveis.com') + '>',
           to: email,
           subject: 'Seu código de verificação - SS Imóveis',
@@ -350,11 +353,10 @@ async function startServer() {
                    </div>
                    <p style="color: #64748b; font-size: 14px; margin-bottom: 0;">Este código expira em 10 minutos.</p>
                  </div>`
-        }).then(info => {
-          console.log(`[Email] Mensagem enviada para ${email}: ${info.messageId}`);
-        }).catch((err: any) => console.error('[Email Erro Background]', err));
+        });
       } catch (emailErr: any) {
         console.error('[Email Setup Erro]', emailErr);
+        return res.status(500).json({ error: 'Erro ao enviar e-mail de código: ' + emailErr.message });
       }
       
       res.json({ 
