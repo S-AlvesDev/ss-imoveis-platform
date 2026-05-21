@@ -218,9 +218,15 @@ export default function App() {
     try {
       const res = await fetch('/api/data');
       const json = await res.json();
-      setData(json);
+      if (res.ok) {
+        setData(json);
+      } else {
+        console.error('Error in /api/data:', json.error);
+        toast.error('Erro ao carregar dados do servidor.');
+      }
     } catch (err) {
       console.error('Error fetching data:', err);
+      toast.error('Problema de conexão com o servidor.');
     }
   };
 

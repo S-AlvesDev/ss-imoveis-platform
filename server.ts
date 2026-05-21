@@ -56,7 +56,7 @@ async function startServer() {
   console.log('[SS Imóveis] Iniciando servidor...');
   const app = express();
   const server = http.createServer(app);
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   // Serve media static files explicitly
   app.use('/media', express.static(path.join(process.cwd(), 'public', 'media')));
