@@ -26,13 +26,12 @@ async function getTransporter() {
               user: process.env.SMTP_USER,
               pass: process.env.SMTP_PASS,
           },
-          connectionTimeout: 10000,
-          greetingTimeout: 5000,
-          socketTimeout: 10000,
           tls: {
              rejectUnauthorized: false
           }
       });
+      
+      console.log(`[Configuração SMTP] Conectando ao host: ${process.env.SMTP_HOST || 'smtp.gmail.com'} na porta: ${process.env.SMTP_PORT || '587'}`);
       return transporter;
   }
   
@@ -277,7 +276,7 @@ async function startServer() {
     try {
       const tp = await getTransporter();
       await tp.sendMail({
-          from: '"SS Imóveis" <' + (process.env.SMTP_FROM_EMAIL || 'nao-responda@ssimoveis.com') + '>',
+          from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'nao-responda@ssimoveis.com' },
           to: targetEmail,
           subject: 'Recuperação de Senha',
           html: `<p>Seu código para recuperar a senha é: <strong>${code}</strong></p><p>Ele expira em 15 minutos.</p>`
@@ -340,7 +339,7 @@ async function startServer() {
       try {
         const mailTransporter = await getTransporter();
         await mailTransporter.sendMail({
-          from: '"SS Imóveis" <' + (process.env.SMTP_FROM_EMAIL || 'nao-responda@ssimoveis.com') + '>',
+          from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'nao-responda@ssimoveis.com' },
           to: email,
           subject: 'Seu código de verificação - SS Imóveis',
           text: `Olá!\n\nSeu código de verificação é: ${code}\n\nEste código é válido por 10 minutos.`,
@@ -635,7 +634,7 @@ async function startServer() {
        
        // Alert admin
        await tp.sendMail({
-           from: '"SS Imóveis" <no-reply@ssimoveis.com>',
+           from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'nao-responda@ssimoveis.com' },
            to: process.env.ADMIN_EMAIL || 'admin@ssimoveis.com',
            subject: 'Novo Lead Recebido!',
            html: `<h2>Novo Interesse em Imóvel</h2>
@@ -648,7 +647,7 @@ async function startServer() {
        // Send technical sheet to client if email is provided
        if (email) {
            await tp.sendMail({
-               from: '"SS Imóveis" <no-reply@ssimoveis.com>',
+               from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'nao-responda@ssimoveis.com' },
                to: email,
                subject: `Detalhes do Imóvel: ${imovelNome}`,
                html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
@@ -1143,7 +1142,7 @@ async function startServer() {
             try {
                 const tp = await getTransporter();
                 await tp.sendMail({
-                    from: '"SS Imóveis" <no-reply@ssimoveis.com>',
+                    from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'nao-responda@ssimoveis.com' },
                     to: process.env.ADMIN_EMAIL || 'admin@ssimoveis.com',
                     subject: `Alerta de Estoque: ${mat.nome}`,
                     html: `<h3>Alerta de Estoque Mínimo Atingido</h3>
