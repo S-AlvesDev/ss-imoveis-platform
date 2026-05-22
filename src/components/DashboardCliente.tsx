@@ -9,7 +9,8 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
-  Phone
+  Phone,
+  MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
@@ -388,6 +389,18 @@ export default function DashboardCliente({ onLogout, clienteNome = "Cliente SS",
           </>
         )}
       </AnimatePresence>
+
+      {/* Botão de Suporte FAB */}
+      <a
+        href="https://wa.me/5584994511030"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-6 right-6 bg-green-500 text-white p-4 rounded-full shadow-2xl hover:bg-green-600 transition-all z-40 active:scale-95 flex items-center justify-center"
+        style={{ boxShadow: '0 4px 20px rgba(34, 197, 94, 0.4)' }}
+        title="Suporte"
+      >
+        <MessageCircle size={28} />
+      </a>
     </div>
   );
 }
