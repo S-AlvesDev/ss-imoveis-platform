@@ -18,15 +18,12 @@ let transporter: nodemailer.Transporter | null = null;
 async function getTransporter() {
   if (transporter) return transporter;
   transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST?.trim() || 'smtp-relay.brevo.com',
-      port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT.trim()) : 587,
-      secure: process.env.SMTP_SECURE?.trim() === 'true' || process.env.SMTP_PORT?.trim() === '465',
+      host: 'smtp-relay.brevo.com',
+      port: 2525, // <-- Mudança principal aqui
+      secure: false, // O false é importante para a porta 2525 (usa STARTTLS)
       auth: {
-          user: process.env.SMTP_USER?.trim() || 'ac20b3001@smtp-brevo.com',
-          pass: process.env.SMTP_PASS?.trim() || 'xsmtpsib-72c71f3e032c9363b3748fb9bae5fe1bc00fbad5e56f94b32df1d8f4a99cdb67-GlFSNSxMj4GSIKve',
-      },
-      tls: {
-         rejectUnauthorized: false
+          user: process.env.BREVO_SMTP_LOGIN, // Seu e-mail de login do Brevo
+          pass: process.env.BREVO_SMTP_KEY    // A chave SMTP que você gerou
       }
   });
   
@@ -280,7 +277,7 @@ async function startServer() {
       
       res.json({ 
         message, 
-        devCode: (!process.env.SMTP_USER && process.env.NODE_ENV !== 'production') ? code : undefined 
+        devCode: (!process.env.BREVO_SMTP_LOGIN && process.env.NODE_ENV !== 'production') ? code : undefined 
       });
     } catch(e: any) {
       console.error('[Mail Error]', e);
@@ -357,7 +354,7 @@ async function startServer() {
       res.json({ 
         message: 'Código enviado com sucesso! Verifique sua caixa de entrada.',
         // Apenas exibe o devCode se não houver SMTP configurado para facilitar os testes, ou remova isso totalmente se for estrito
-        devCode: (!process.env.SMTP_USER && process.env.NODE_ENV !== 'production') ? code : undefined 
+        devCode: (!process.env.BREVO_SMTP_LOGIN && process.env.NODE_ENV !== 'production') ? code : undefined 
       });
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao enviar código de verificação.' });
