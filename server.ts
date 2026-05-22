@@ -17,25 +17,21 @@ import { handleSimulacaoMCMV } from './src/lib/simuladorMCMV.ts';
 let transporter: nodemailer.Transporter | null = null;
 async function getTransporter() {
   if (transporter) return transporter;
-  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-      transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',
-          port: parseInt(process.env.SMTP_PORT || '587'),
-          secure: process.env.SMTP_SECURE === 'true' || parseInt(process.env.SMTP_PORT || '587') === 465,
-          auth: {
-              user: process.env.SMTP_USER.trim(),
-              pass: process.env.SMTP_PASS.trim(),
-          },
-          tls: {
-             rejectUnauthorized: false
-          }
-      });
-      
-      console.log(`[Configuração SMTP] Conectando ao host: ${process.env.SMTP_HOST || 'smtp-relay.brevo.com'} na porta: ${process.env.SMTP_PORT || '587'}`);
-      return transporter;
-  }
+  transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST?.trim() || 'smtp-relay.brevo.com',
+      port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT.trim()) : 587,
+      secure: process.env.SMTP_SECURE?.trim() === 'true' || process.env.SMTP_PORT?.trim() === '465',
+      auth: {
+          user: process.env.SMTP_USER?.trim() || 'ac20b3001@smtp-brevo.com',
+          pass: process.env.SMTP_PASS?.trim() || 'xsmtpsib-72c71f3e032c9363b3748fb9bae5fe1bc00fbad5e56f94b32df1d8f4a99cdb67-GlFSNSxMj4GSIKve',
+      },
+      tls: {
+         rejectUnauthorized: false
+      }
+  });
   
-  throw new Error("Credenciais SMTP não configuradas. Adicione SMTP_USER e SMTP_PASS nas variáveis de ambiente.");
+  console.log(`[Configuração SMTP] Conectando ao host configurado.`);
+  return transporter;
 }
 
 import { supabaseServer } from './src/lib/supabaseServer.ts';
@@ -276,7 +272,7 @@ async function startServer() {
     try {
       const tp = await getTransporter();
       await tp.sendMail({
-          from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'noreply@contact.ssimoveisbrasil.app' },
+          from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'alvesluizsamuel@gmail.com' },
           to: targetEmail,
           subject: 'Recuperação de Senha',
           html: `<p>Seu código para recuperar a senha é: <strong>${code}</strong></p><p>Ele expira em 15 minutos.</p>`
@@ -339,7 +335,7 @@ async function startServer() {
       try {
         const mailTransporter = await getTransporter();
         await mailTransporter.sendMail({
-          from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'noreply@contact.ssimoveisbrasil.app' },
+          from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'alvesluizsamuel@gmail.com' },
           to: email,
           subject: 'Seu código de verificação - SS Imóveis',
           text: `Olá!\n\nSeu código de verificação é: ${code}\n\nEste código é válido por 10 minutos.`,
@@ -634,7 +630,7 @@ async function startServer() {
        
        // Alert admin
        await tp.sendMail({
-           from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'noreply@contact.ssimoveisbrasil.app' },
+           from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'alvesluizsamuel@gmail.com' },
            to: process.env.ADMIN_EMAIL || 'admin@ssimoveis.com',
            subject: 'Novo Lead Recebido!',
            html: `<h2>Novo Interesse em Imóvel</h2>
@@ -647,7 +643,7 @@ async function startServer() {
        // Send technical sheet to client if email is provided
        if (email) {
            await tp.sendMail({
-               from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'noreply@contact.ssimoveisbrasil.app' },
+               from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'alvesluizsamuel@gmail.com' },
                to: email,
                subject: `Detalhes do Imóvel: ${imovelNome}`,
                html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
@@ -793,43 +789,51 @@ async function startServer() {
 
 
   app.get('/api/data', async (req, res) => {
-    const { data: clients } = await supabaseServer.from('clients').select('*');
-    const { data: properties } = await supabaseServer.from('properties').select('*');
-    const { data: contracts } = await supabaseServer.from('contracts').select('*');
-    const { data: staff } = await supabaseServer.from('users').select('*').neq('role', 'CLIENTE');
-    const { data: updateLogs } = await supabaseServer.from('update_logs').select('*');
-    const { data: comissoes } = await supabaseServer.from('comissoes').select('*').order('data_criacao', { ascending: false });
-    
-    // Attempt to select materials, if it fails gracefully fallback to inMemory arrays
-    let materials = [];
-    let materialMovements = [];
     try {
-        const { data: mats, error: errMats } = await supabaseServer.from('materials').select('*');
-        const { data: movs, error: errMovs } = await supabaseServer.from('material_movements').select('*, materials(nome)');
-        if (!errMats && typeof errMats !== 'undefined') materials = mats || [];
-        else throw new Error("materials table missing");
-        if (!errMovs && typeof errMovs !== 'undefined') materialMovements = movs || [];
-        else throw new Error("material_movements table missing");
-    } catch {
-        materials = inMemoryMaterials;
-        materialMovements = inMemoryMovements;
-    }
+      const { data: clients, error: errClients } = await supabaseServer.from('clients').select('*');
+      if (errClients) throw errClients;
+      const { data: properties, error: errProp } = await supabaseServer.from('properties').select('*');
+      if (errProp) throw errProp;
+      const { data: contracts, error: errCont } = await supabaseServer.from('contracts').select('*');
+      if (errCont) throw errCont;
+      const { data: staff, error: errStaff } = await supabaseServer.from('users').select('*').neq('role', 'CLIENTE');
+      if (errStaff) throw errStaff;
+      const { data: updateLogs, error: errLogs } = await supabaseServer.from('update_logs').select('*');
+      if (errLogs) throw errLogs;
+      const { data: comissoes, error: errCom } = await supabaseServer.from('comissoes').select('*').order('data_criacao', { ascending: false });
+      if (errCom) console.warn("Comissoes table error (ignoring):", errCom.message);
+      
+      // Attempt to select materials, if it fails gracefully fallback to inMemory arrays
+      let materials = [];
+      let materialMovements = [];
+      try {
+          const { data: mats, error: errMats } = await supabaseServer.from('materials').select('*');
+          const { data: movs, error: errMovs } = await supabaseServer.from('material_movements').select('*, materials(nome)');
+          if (!errMats && typeof errMats !== 'undefined') materials = mats || [];
+          else throw new Error("materials table missing");
+          if (!errMovs && typeof errMovs !== 'undefined') materialMovements = movs || [];
+          else throw new Error("material_movements table missing");
+      } catch (e: any) {
+          console.warn("Materials table missed (using fallback):", e.message);
+          materials = inMemoryMaterials;
+          materialMovements = inMemoryMovements;
+      }
 
-    const mapContract = (c: any) => ({
-      ...c,
-      clientId: c.client_id,
-      propertyId: c.property_id,
-      valorImovel: c.valor_imovel,
-      valorEntrada: c.valor_entrada,
-      taxaJuros: c.taxa_juros,
-      numParcelas: c.num_parcelas,
-      tipoAmortizacao: c.tipo_amortizacao,
-      valorFinanciado: c.valor_financiado,
-      dataContrato: c.data_contrato,
-      dataInicioPagamento: c.data_inicio_pagamento,
-      tipoContrato: c.tipo_contrato,
-      statusFinanceiro: c.status_financeiro,
-    });
+      const mapContract = (c: any) => ({
+        ...c,
+        clientId: c.client_id,
+        propertyId: c.property_id,
+        valorImovel: c.valor_imovel,
+        valorEntrada: c.valor_entrada,
+        taxaJuros: c.taxa_juros,
+        numParcelas: c.num_parcelas,
+        tipoAmortizacao: c.tipo_amortizacao,
+        valorFinanciado: c.valor_financiado,
+        dataContrato: c.data_contrato,
+        dataInicioPagamento: c.data_inicio_pagamento,
+        tipoContrato: c.tipo_contrato,
+        statusFinanceiro: c.status_financeiro,
+      });
     
     const mapLog = (l: any) => ({
       ...l,
@@ -866,6 +870,10 @@ async function startServer() {
         updateLogs: (updateLogs || []).map(mapLog),
         comissoes: comissoes || []
     });
+    } catch (e: any) {
+        console.error("ERRO FATAL EM /api/data:", e);
+        res.status(500).json({ error: e.message || "Erro interno no servidor" });
+    }
   });
 
   app.get('/api/supabase-test', async (req, res) => {
@@ -1142,7 +1150,7 @@ async function startServer() {
             try {
                 const tp = await getTransporter();
                 await tp.sendMail({
-                    from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'noreply@contact.ssimoveisbrasil.app' },
+                    from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'alvesluizsamuel@gmail.com' },
                     to: process.env.ADMIN_EMAIL || 'admin@ssimoveis.com',
                     subject: `Alerta de Estoque: ${mat.nome}`,
                     html: `<h3>Alerta de Estoque Mínimo Atingido</h3>
