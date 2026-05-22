@@ -11,6 +11,7 @@ export interface SimulacaoData {
   regiao_imovel: string;
   subsidio_maximo_municipio: number | '';
   idade_comprador_principal: number | '';
+  entrada_preferencial_usuario: number | '';
 }
 
 interface SimuladorState {
@@ -37,7 +38,8 @@ const initialState: SimulacaoData = {
   saldo_fgts: '',
   regiao_imovel: 'Sudeste',
   subsidio_maximo_municipio: 55000,
-  idade_comprador_principal: 30
+  idade_comprador_principal: 30,
+  entrada_preferencial_usuario: ''
 };
 
 export const useSimuladorStore = create<SimuladorState>((set) => ({

@@ -13,7 +13,8 @@ export const handleSimulacaoMCMV = (req: Request, res: Response) => {
       saldo_fgts = 0, 
       regiao_imovel = 'Sudeste', 
       subsidio_maximo_municipio = 0,
-      idade_comprador_principal = 30
+      idade_comprador_principal = 30,
+      entrada_preferencial_usuario = 0
     } = req.body;
 
     if (!valor_imovel || !renda_bruta || !regiao_imovel || subsidio_maximo_municipio == null) {
@@ -58,27 +59,24 @@ export const handleSimulacaoMCMV = (req: Request, res: Response) => {
       return res.status(400).json({ error: `O valor do imóvel (R$ ${valor_imovel.toFixed(2)}) supera o teto máximo permitido para a sua faixa de renda (R$ ${limite_imovel.toFixed(2)}).` });
     }
 
+    // Dynamic Subsidy Bump (Bank-like behavior for lower incomes)
+    if (renda_bruta <= 3200 && subsidio > 0 && subsidio < subsidio_maximo_municipio) {
+       subsidio = Math.min(subsidio_maximo_municipio, subsidio * 1.1); // Otmização leve
+    }
+
     if (tem_3_anos_fgts) {
       taxa_juros_anual = Math.max(0, taxa_juros_anual - 0.5);
     }
 
-    let valor_financiado = valor_imovel * 0.8;
-    const taxa_mensal = (taxa_juros_anual / 100) / 12; // Juros simples dividido por 12 (comercial banco) ou composto? No SFH usa juros / 12 nominal
     const teto_parcela = renda_bruta * 0.3;
+    const taxa_mensal = (taxa_juros_anual / 100) / 12; 
     
     // Taxas Secundárias
-    const TAXA_MIP_MENSAL = 0.00025; // 0.025%
-    const TAXA_DFI_MENSAL = 0.00005; // 0.005%
+    const TAXA_MIP_MENSAL = 0.00025; 
+    const TAXA_DFI_MENSAL = 0.00005; 
     const TAF = 25.00;
     const valor_dfi_mensal = valor_imovel * TAXA_DFI_MENSAL;
 
-    let parcelas = [];
-    let aprovado = false;
-    let tentativa_sistema = sistema_amortizacao;
-    let teve_mudanca_para_price = false;
-
-    // Iteração para achar o valor_financiado correto que caiba nos 30% da renda.
-    // Primeiro tenta o sistema solicitado. Se falhar, e for SAC, tenta PRICE.
     const calcularParcelas = (sis: string, val_fin: number) => {
       let parc = [];
       let saldo = val_fin;
@@ -109,43 +107,84 @@ export const handleSimulacaoMCMV = (req: Request, res: Response) => {
       return parc;
     };
 
-    do {
-       parcelas = calcularParcelas(tentativa_sistema, valor_financiado);
-       let primeira_parcela = parcelas[0].parcela_total;
+    // --- ENGINe MOTOR BANCÁRIO DE OTIMIZAÇÃO ---
+    
+    // 1. LTV Máximo é 80% do imóvel (regra geral SFH/MCMV para não cotistas, podendo chegar a 90% em alguns casos, mas usaremos 80% como base conservadora, ajustável para 90% via Subsídio/FGTS)
+    // O banco permite financiar até 80-90%. Vamos assumir 80% como valor financiado máximo normativo.
+    let valor_financiado_max_ltv = valor_imovel * 0.8;
+    
+    // 2. Busca o Valor Financiado Máximo por Renda (Busca binária/iterativa)
+    let tentativa_sistema = sistema_amortizacao;
+    let teve_mudanca_para_price = false;
+    let estrategia_aprovacao = `Tentativa inicial ${sistema_amortizacao}`;
 
-       if (primeira_parcela <= teto_parcela) {
-           aprovado = true;
-       } else {
-           // Se excedeu 30%, nós podemos: 
-           // 1. Mudar pra PRICE se estava no SAC e o cliente quer
-           if (tentativa_sistema === 'SAC') {
-               const parcelas_price_temp = calcularParcelas('PRICE', valor_financiado);
-               if (parcelas_price_temp[0].parcela_total <= teto_parcela) {
-                   tentativa_sistema = 'PRICE';
-                   teve_mudanca_para_price = true;
-                   continue;
-               }
+    const iterarValorFinanciadoAteAprovar = (sistema: string, max_in: number) => {
+       let val_try = max_in;
+       let slice = 1000;
+       while (val_try > 0) {
+           let parcelas_teste = calcularParcelas(sistema, val_try);
+           if (parcelas_teste[0].parcela_total <= teto_parcela) {
+               return val_try; // Aprovado
            }
-           
-           // 2. Reduz o valor financiado até aprovar
-           let diff = primeira_parcela - teto_parcela;
-           // ajuste grosso modo
-           let slice = diff * 100;
-           if (slice < 1000) slice = 1000;
-           valor_financiado -= slice;
-           
-           if (valor_financiado <= 0) {
-               valor_financiado = 0;
-               aprovado = true; // aprovado com zero financiado (pagou tudo a vista?)
-           }
+           val_try -= slice;
+           if (val_try < 0) val_try = 0;
        }
-    } while (!aprovado && valor_financiado > 0);
+       return 0;
+    };
+    
+    let valor_financiado = iterarValorFinanciadoAteAprovar(tentativa_sistema, valor_financiado_max_ltv);
+    
+    // Otimização: Tries PRICE if SAC yields very low financing
+    if (tentativa_sistema === 'SAC' && valor_financiado < valor_financiado_max_ltv) {
+        let valor_fin_price = iterarValorFinanciadoAteAprovar('PRICE', valor_financiado_max_ltv);
+        if (valor_fin_price > valor_financiado + 5000) { // Se aprova bem mais no PRICE
+            tentativa_sistema = 'PRICE';
+            teve_mudanca_para_price = true;
+            valor_financiado = valor_fin_price;
+            estrategia_aprovacao = 'Migração para PRICE para aprovar maior valor';
+        }
+    }
 
-    if (valor_financiado < 0) valor_financiado = 0;
+    // 3. Calculando as entradas
+    let entrada_minima_bruta = valor_imovel - valor_financiado; 
+    
+    // Quanto FGTS e Subsídio absorvem dessa entrada bruta?
+    let fgts_disponivel = Number(saldo_fgts) || 0;
+    
+    // Subsidio tem um teto baseado na entrada exigida? Não, o subsídio é um valor fixo concedido (ou abatido do saldo).
+    // O governo dá X de subsídio. Isso abate DE FATO no valor que a pessoa precisa desembolsar.
+    let valor_absorvido_subsidio = Math.min(subsidio, entrada_minima_bruta);
+    let entrada_minima_apos_subsidio = entrada_minima_bruta - valor_absorvido_subsidio;
+    
+    let valor_fgts_utilizado = Math.min(fgts_disponivel, entrada_minima_apos_subsidio);
+    let entrada_minima_necessaria = entrada_minima_apos_subsidio - valor_fgts_utilizado;
 
-    let entrada_exigida = valor_imovel - valor_financiado;
-    let entrada_a_pagar = entrada_exigida - subsidio - (saldo_fgts || 0);
-    if (entrada_a_pagar < 0) entrada_a_pagar = 0;
+    if (entrada_minima_necessaria < 0) entrada_minima_necessaria = 0;
+
+    // 4. Tratando a "Entrada Informada" pelo usuário (Dinâmica)
+    let entrada_informada = Number(entrada_preferencial_usuario) || 0;
+    
+    // Se o usuário deu menos entrada do que a mínima:
+    if (entrada_informada < entrada_minima_necessaria) {
+        estrategia_aprovacao = `Usuário informou entrada de R$ ${entrada_informada}, mas a mínima para aprovar 30% da renda é R$ ${entrada_minima_necessaria.toFixed(2)}. ${estrategia_aprovacao}`;
+    }
+    
+    // A Entrada que de fato vai ser paga pelo usuário (pode ser a mínima ou a que ele quer, se for maior)
+    let entrada_a_pagar = Math.max(entrada_informada, entrada_minima_necessaria);
+    
+    let entrada_ideal = entrada_minima_necessaria > 0 ? entrada_minima_necessaria + (valor_imovel * 0.05) : 0; // Ideal dar um pouco mais que a minima
+    let entrada_otimizada = entrada_minima_necessaria;
+
+    // Recalcula o valor financiado real baseado na entrada a ser dada (para reduzir a dívida se o cara deu mais entrada)
+    let financiamento_final_real = valor_imovel - entrada_a_pagar - valor_fgts_utilizado - valor_absorvido_subsidio;
+    if (financiamento_final_real < 0) financiamento_final_real = 0;
+
+    // Recalcular as parcelas com o valor_final (já sabendo que vai passar pois é <= valor_financiado original)
+    let parcelas = calcularParcelas(tentativa_sistema, financiamento_final_real);
+
+    if (entrada_minima_necessaria === 0 && entrada_informada === 0) {
+        estrategia_aprovacao += " - ENTRADA ZERO! Imóvel 100% coberto pelo LTV + FGTS + Subsídio.";
+    }
 
     let total_juros = 0;
     let total_pago = 0;
@@ -160,10 +199,11 @@ export const handleSimulacaoMCMV = (req: Request, res: Response) => {
     res.json({
       resumo: {
         valor_imovel: Number(valor_imovel.toFixed(2)),
-        valor_financiado: Number(valor_financiado.toFixed(2)),
-        entrada_exigida: Number(entrada_exigida.toFixed(2)),
+        valor_financiado: Number(financiamento_final_real.toFixed(2)),
+        entrada_exigida: Number(entrada_minima_bruta.toFixed(2)),
         entrada_a_pagar: Number(entrada_a_pagar.toFixed(2)),
-        subsidio: Number(subsidio.toFixed(2)),
+        subsidio: Number(valor_absorvido_subsidio.toFixed(2)),
+        subsidio_concedido: Number(subsidio.toFixed(2)),
         taxa_juros_anual_aplicada: Number(taxa_juros_anual.toFixed(2)),
         sistema_amortizacao_final: tentativa_sistema,
         alerta_mudanca_sistema: teve_mudanca_para_price,
@@ -173,8 +213,16 @@ export const handleSimulacaoMCMV = (req: Request, res: Response) => {
         total_pago_final: Number(total_pago.toFixed(2)),
         custos: {
            estimativa_itbi_registro: Number(custo_itbi_cartorio.toFixed(2)),
-           doc_gratis: false // construtora oferece? (flag fake requirement)
-        }
+           doc_gratis: false 
+        },
+        // Novos Campos Motor Inteligente
+        entrada_informada: entrada_informada,
+        entrada_minima_necessaria: Number(entrada_minima_necessaria.toFixed(2)),
+        entrada_ideal: Number(entrada_ideal.toFixed(2)),
+        entrada_otimizada: Number(entrada_otimizada.toFixed(2)),
+        valor_fgts_utilizado: Number(valor_fgts_utilizado.toFixed(2)),
+        valor_absorvido_subsidio: Number(valor_absorvido_subsidio.toFixed(2)),
+        estrategia_aprovacao: estrategia_aprovacao
       },
       projecao: parcelas.map(p => ({
         mes: p.mes,

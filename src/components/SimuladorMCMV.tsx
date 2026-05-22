@@ -37,6 +37,7 @@ export default function SimuladorMCMV() {
           valor_imovel: Number(data.valor_imovel),
           renda_bruta_familiar: Number(data.renda_bruta_familiar),
           saldo_fgts: Number(data.saldo_fgts || 0),
+          entrada_preferencial_usuario: Number(data.entrada_preferencial_usuario || 0),
           subsidio_maximo_municipio: Number(data.subsidio_maximo_municipio || 0),
           idade_comprador_principal: Number(data.idade_comprador_principal || 30)
         })
@@ -174,6 +175,11 @@ export default function SimuladorMCMV() {
                   </div>
 
                   <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Entrada Desejada (Opcional) (R$)</label>
+                    <input type="number" name="entrada_preferencial_usuario" value={data.entrada_preferencial_usuario} onChange={handleChange} className="w-full border-gray-300 rounded-lg p-3 border focus:ring-2 focus:ring-[#005CA9] transition-all outline-none" placeholder="Deixe 0 para mínima" />
+                  </div>
+
+                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Idade do Comprador Principal</label>
                     <input type="number" name="idade_comprador_principal" value={data.idade_comprador_principal} onChange={handleChange} className="w-full border-gray-300 rounded-lg p-3 border focus:ring-2 focus:ring-[#005CA9] transition-all outline-none" />
                   </div>
@@ -244,40 +250,54 @@ export default function SimuladorMCMV() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                       <div className={`p-6 rounded-2xl border-2 ${result.resumo.entrada_a_pagar <= 0 ? 'bg-green-50 border-green-500' : 'bg-gray-50 border-[#005CA9]/30'} shadow-sm relative`}>
                         {result.resumo.entrada_a_pagar <= 0 && <div className="absolute -top-3 -right-3 bg-green-500 text-white text-xs font-black px-4 py-1.5 rounded-full shadow-lg transform rotate-6 border-white border-2">ENTRADA ZERO!</div>}
-                        <div className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Recursos Próprios (Entrada)</div>
+                        <div className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Entrada Final a Pagar</div>
                         <div className={`text-3xl font-black ${result.resumo.entrada_a_pagar <= 0 ? 'text-green-600' : 'text-[#005CA9]'}`}>
                           R$ {result.resumo.entrada_a_pagar.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                         </div>
                         <div className="text-xs text-gray-400 mt-2 font-medium">
-                           Entrada Base: R$ {result.resumo.entrada_exigida.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                           Mínima p/ aprovar: R$ {result.resumo.entrada_minima_necessaria.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                         </div>
                       </div>
 
-                      <div className="p-6 rounded-2xl bg-orange-50 border-2 border-orange-200 shadow-sm">
-                        <div className="text-xs text-orange-800 font-bold uppercase tracking-wider mb-1">Subsídio Governamental</div>
+                      <div className="p-6 rounded-2xl bg-orange-50 border-2 border-orange-200 shadow-sm relative">
+                        <div className="text-xs text-orange-800 font-bold uppercase tracking-wider mb-1">Subsídio Utilizado</div>
                         <div className="text-3xl font-black text-[#F39200]">
-                          R$ {result.resumo.subsidio.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                          R$ {result.resumo.valor_absorvido_subsidio.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                         </div>
-                        <div className="text-xs text-orange-600 mt-2 font-medium">Abatimento Direto MCMV 2026</div>
+                        <div className="text-xs text-orange-600 mt-2 font-medium">
+                           Abatido da entrada automaticamente.
+                           {result.resumo.subsidio_concedido > result.resumo.valor_absorvido_subsidio && ` (Total Concedido: R$ ${result.resumo.subsidio_concedido.toLocaleString('pt-BR', {minimumFractionDigits: 2})})`}
+                        </div>
                       </div>
                       
                       <div className="p-6 rounded-2xl bg-gray-50 border-2 border-gray-200 shadow-sm">
-                        <div className="text-xs text-gray-600 font-bold uppercase tracking-wider mb-1">Financiamento Caixa</div>
+                        <div className="text-xs text-gray-600 font-bold uppercase tracking-wider mb-1">FGTS Utilizado</div>
                         <div className="text-3xl font-black text-gray-800">
-                          R$ {result.resumo.valor_financiado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                          R$ {result.resumo.valor_fgts_utilizado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                         </div>
-                        <div className="text-xs text-gray-500 mt-2 font-medium space-x-2">
-                           <span className="bg-gray-200 px-2 py-1 rounded text-[10px] uppercase font-bold text-gray-800">{result.resumo.sistema_amortizacao_final}</span>
-                           <span className="font-bold border-l pl-2 border-gray-300">CET: {result.resumo.taxa_juros_anual_aplicada}% a.a.</span>
+                        <div className="text-xs text-gray-500 mt-2 font-medium">
+                           Absorveu parte da entrada
                         </div>
                       </div>
+                    </div>
+                    
+                    <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl mb-6 shadow-sm">
+                        <strong className="block text-sm mb-1 uppercase tracking-wider text-blue-900">Estratégia do Motor Bancário:</strong>
+                        <p className="text-sm text-blue-800 font-medium">{result.resumo.estrategia_aprovacao}</p>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                        <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-                         <h4 className="text-sm font-bold uppercase text-gray-400 mb-4 tracking-wider">Projeção de Parcelas ({data.prazo_meses}x)</h4>
+                         <h4 className="text-sm font-bold uppercase text-gray-400 mb-4 tracking-wider">Financiamento Caixa</h4>
+                         <div className="text-3xl font-black text-gray-800 mb-4">
+                           R$ {result.resumo.valor_financiado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                         </div>
+                         <div className="text-xs text-gray-500 font-medium space-x-2 mb-4">
+                            <span className="bg-gray-200 px-2 py-1 rounded text-[10px] uppercase font-bold text-gray-800">{result.resumo.sistema_amortizacao_final}</span>
+                            <span className="font-bold border-l pl-2 border-gray-300">CET: {result.resumo.taxa_juros_anual_aplicada}% a.a.</span>
+                         </div>
                          
-                         <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl mb-3">
+                         <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl mb-3 mt-2">
                            <div>
                              <span className="block text-[10px] text-gray-500 font-bold uppercase">Primeira Parcela</span>
                              <span className="text-xl font-black text-[#005CA9]">R$ {result.resumo.parcela_1.toLocaleString('pt-BR', {minimumFractionDigits:2})}</span>
