@@ -9,9 +9,9 @@ import jwt from 'jsonwebtoken';
 import createDOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
 import multer from 'multer';
+import sharp from 'sharp';
 import { createServer as createViteServer } from 'vite';
 import nodemailer from 'nodemailer';
-import { calculateSAC, calculatePrice, AmortizationType } from './src/lib/finance.ts';
 import { handleSimulacaoMCMV } from './src/lib/simuladorMCMV.ts';
 
 let transporter: nodemailer.Transporter | null = null;
@@ -39,7 +39,66 @@ const window = dom.window;
 const DOMPurify = createDOMPurify(window as any);
 const JWT_SECRET = process.env.JWT_SECRET || 'afefde38-f16e-44de-ab2f-4fb4d50af7b1';
 
-import sharp from 'sharp';
+function sanitizeProperty(p: any) {
+  if (!p) return p;
+  let originalDesc = p.descricao || '';
+  let actualDesc = originalDesc;
+  let images: string[] = [];
+  let tipo = 'Lote'; // default value
+
+  // 1. Parse Image URLs
+  if (p.images) {
+      if (Array.isArray(p.images)) {
+          images = p.images;
+      } else if (typeof p.images === 'string') {
+          try {
+              const parsed = JSON.parse(p.images);
+              if (Array.isArray(parsed)) {
+                  images = parsed;
+              } else if (parsed) {
+                  images = [parsed];
+              }
+          } catch (e) {
+              const str = p.images.trim();
+              if (str.startsWith('{') && str.endsWith('}')) {
+                  images = str.slice(1, -1).split(',').map((s: any) => s.trim().replace(/^['"]|['"]$/g, ''));
+              } else if (str) {
+                  images = [str];
+              }
+          }
+      }
+  }
+
+  // If images empty, try parsing from the raw description
+  if (images.length === 0 && typeof originalDesc === 'string' && originalDesc.includes('|||IMAGES:')) {
+      const parts = originalDesc.split('|||IMAGES:');
+      try {
+          const parsed = JSON.parse(parts[1]);
+          if (Array.isArray(parsed)) {
+              images = parsed;
+          }
+      } catch (e) {}
+  }
+
+  // 2. Parse Type (TIPO) and clean description
+  if (typeof originalDesc === 'string') {
+      let baseText = originalDesc.split('|||IMAGES:')[0];
+      if (baseText.includes('|||TIPO:')) {
+          const parts = baseText.split('|||TIPO:');
+          actualDesc = parts[0];
+          tipo = parts[1] ? parts[1].trim() : 'Lote';
+      } else {
+          actualDesc = baseText;
+      }
+  }
+
+  return {
+    ...p,
+    descricao: actualDesc,
+    images: images.filter(Boolean),
+    tipo: tipo || 'Lote'
+  };
+}
 
 // Setup Multer Storage (Memory storage to allow sharp compression)
 const storage = multer.memoryStorage();
@@ -546,62 +605,24 @@ async function startServer() {
     if (error || !contractRaw) return res.status(404).json({ error: 'Contrato não encontrado' });
     const contract = mapContract(contractRaw);
 
-    const totalPaid = (contract.installments || [])
-      .filter((i: any) => i.pago)
-      .reduce((acc: number, cur: any) => acc + (cur.valorTotal || 0), 0);
-
     res.json({
-      totalPaid,
-      option50: totalPaid * 0.5,
-      option80: totalPaid * 0.8,
+      totalPaid: 0,
+      option50: 0,
+      option80: 0,
     });
   });
 
   app.post('/api/contracts/:id/cancel', async (req, res) => {
     const { id } = req.params;
-    const { option, numInstallments } = req.body; // option: '50' or '80'
     const { data: contractRaw, error } = await supabaseServer.from('contracts').select('*').eq('id', Number(id)).maybeSingle();
     
     if (error || !contractRaw) return res.status(404).json({ error: 'Contrato não encontrado' });
     const contract = mapContract(contractRaw);
     if (contract.status === 'DISTRATADO') return res.status(400).json({ error: 'Contrato já distratado' });
 
-    const totalPaid = (contract.installments || [])
-      .filter((i: any) => i.pago)
-      .reduce((acc: number, cur: any) => acc + (cur.valorTotal || 0), 0);
-
-    let refundTotal = 0;
-    let schedule = [];
-    const today = new Date();
-
-    if (option === '50') {
-      refundTotal = totalPaid * 0.5;
-      schedule.push({
-        parcela: 1,
-        valor: refundTotal,
-        vencimento: new Date(today.setMonth(today.getMonth() + 1)).toISOString().split('T')[0],
-        status: 'PROGRAMADO'
-      });
-    } else if (option === '80') {
-      refundTotal = totalPaid * 0.8;
-      const valPerInstallment = refundTotal / numInstallments;
-      for (let i = 1; i <= numInstallments; i++) {
-        const dueDate = new Date(today.getFullYear(), today.getMonth() + i, today.getDate());
-        schedule.push({
-          parcela: i,
-          valor: valPerInstallment,
-          vencimento: dueDate.toISOString().split('T')[0],
-          status: 'PROGRAMADO'
-        });
-      }
-    }
-
     const updatedDistrato = {
       data: new Date().toISOString().split('T')[0],
-      opcaoEscolhida: option,
-      valorTotalPago: totalPaid,
-      valorReembolso: refundTotal,
-      cronogramaDevolucao: schedule
+      pdfs: contract.distrato?.pdfs || []
     };
 
     await supabaseServer.from('contracts').update({
@@ -614,7 +635,7 @@ async function startServer() {
 
     await supabaseServer.from('update_logs').insert({
       tipo: 'DISTRATO',
-      descricao: `Contrato ${id} cancelado via distrato. Opção ${option}%.`
+      descricao: `Contrato ${id} cancelado via distrato simples.`
     });
 
     res.json({ ...contract, status: 'DISTRATADO', distrato: updatedDistrato });
@@ -667,100 +688,103 @@ async function startServer() {
   });
 
   app.post('/api/properties', upload.array('images', 10), async (req, res) => {
-    const { nome, valor, localizacao, descricao } = req.body;
-    const files = req.files as Express.Multer.File[];
-    
-    // Process and compress images
-    const dir = path.join(process.cwd(), 'public', 'media');
-    if (!require('fs').existsSync(dir)) require('fs').mkdirSync(dir, { recursive: true });
-    
-    const imageUrls: string[] = [];
-    if (files && files.length > 0) {
-       for (const file of files) {
-          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9) + '.webp';
-          const outPath = path.join(dir, uniqueSuffix);
-          await sharp(file.buffer)
-            .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
-            .webp({ quality: 80 })
-            .toFile(outPath);
-          imageUrls.push(`/media/${uniqueSuffix}`);
-       }
-    }
-    
-    let finalDesc = (descricao || 'Sem descrição detalhada');
-    if (imageUrls.length > 0) {
-       finalDesc += '|||IMAGES:' + JSON.stringify(imageUrls);
-    }
-    
-    const { data: newProperty, error } = await supabaseServer.from('properties').insert({ 
-      nome, 
-      valor: Number(valor),
-      localizacao: localizacao || 'Não informada',
-      descricao: finalDesc,
-      status: 'DISPONÍVEL'
-    }).select().maybeSingle();
+    try {
+      const { nome, valor, localizacao, descricao, tipo } = req.body;
+      const files = req.files as Express.Multer.File[];
+      
+      // Process and compress images
+      const dir = path.join(process.cwd(), 'public', 'media');
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      
+      const imageUrls: string[] = [];
+      if (files && files.length > 0) {
+         for (const file of files) {
+            const ext = path.extname(file.originalname) || '.png';
+            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9) + ext;
+            const outPath = path.join(dir, uniqueSuffix);
+            fs.writeFileSync(outPath, file.buffer);
+            imageUrls.push(`/media/${uniqueSuffix}`);
+         }
+      }
+      
+      let finalDesc = (descricao || 'Sem descrição detalhada');
+      if (tipo) {
+         finalDesc += '|||TIPO:' + tipo;
+      }
+      if (imageUrls.length > 0) {
+         finalDesc += '|||IMAGES:' + JSON.stringify(imageUrls);
+      }
+      
+      const { data: newProperty, error } = await supabaseServer.from('properties').insert({ 
+        nome, 
+        valor: Number(valor),
+        localizacao: localizacao || 'Não informada',
+        descricao: finalDesc,
+        status: 'DISPONÍVEL',
+        images: imageUrls
+      }).select().maybeSingle();
 
-    if (error) return res.status(500).json({ error: error.message });
-    if (!newProperty) return res.status(500).json({ error: 'Erro ao criar imóvel: nenhum dado retornado.' });
-    
-    let actualDesc = newProperty.descricao;
-    let images = [];
-    if (typeof actualDesc === 'string' && actualDesc.includes('|||IMAGES:')) {
-        const parts = actualDesc.split('|||IMAGES:');
-        actualDesc = parts[0];
-        try { images = JSON.parse(parts[1]); } catch(e) {}
-    } else if (newProperty.images) {
-        images = newProperty.images;
+      if (error) return res.status(500).json({ error: error.message });
+      if (!newProperty) return res.status(500).json({ error: 'Erro ao criar imóvel: nenhum dado retornado.' });
+      
+      res.json(sanitizeProperty(newProperty));
+    } catch (err: any) {
+      console.error('[Properties POST Error]', err);
+      res.status(500).json({ error: 'Erro no servidor: ' + err.message });
     }
-    newProperty.descricao = actualDesc;
-    newProperty.images = images;
-    
-    res.json(newProperty);
   });
 
   app.put('/api/properties/:id', upload.array('images', 10), async (req, res) => {
-    const { id } = req.params;
-    const { nome, valor, localizacao, descricao, existingImages } = req.body;
-    let imageUrls: string[] = [];
-    
-    if (existingImages) {
-        const parsedExisting = JSON.parse(existingImages);
-        imageUrls = Array.isArray(parsedExisting) ? parsedExisting : [parsedExisting];
-    }
-    
-    const files = req.files as Express.Multer.File[];
-    if (files && files.length > 0) {
-        imageUrls = [...imageUrls, ...files.map(file => `/media/${file.filename}`)];
-    }
+    try {
+      const { id } = req.params;
+      const { nome, valor, localizacao, descricao, existingImages, tipo } = req.body;
+      let imageUrls: string[] = [];
+      
+      if (existingImages) {
+          try {
+            const parsedExisting = JSON.parse(existingImages);
+            imageUrls = Array.isArray(parsedExisting) ? parsedExisting : [parsedExisting];
+          } catch(e) {}
+      }
+      
+      const files = req.files as Express.Multer.File[];
+      const dir = path.join(process.cwd(), 'public', 'media');
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-    let finalDesc = descricao || '';
-    if (imageUrls.length > 0) {
-       finalDesc += '|||IMAGES:' + JSON.stringify(imageUrls);
-    }
+      if (files && files.length > 0) {
+          for (const file of files) {
+             const ext = path.extname(file.originalname) || '.png';
+             const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9) + ext;
+             const outPath = path.join(dir, uniqueSuffix);
+             fs.writeFileSync(outPath, file.buffer);
+             imageUrls.push(`/media/${uniqueSuffix}`);
+          }
+      }
 
-    const { data: updatedProperty, error } = await supabaseServer.from('properties').update({
-       nome, 
-       valor: Number(valor), 
-       localizacao, 
-       descricao: finalDesc
-    }).eq('id', Number(id)).select().maybeSingle();
+      let finalDesc = descricao || '';
+      if (tipo) {
+         finalDesc += '|||TIPO:' + tipo;
+      }
+      if (imageUrls.length > 0) {
+         finalDesc += '|||IMAGES:' + JSON.stringify(imageUrls);
+      }
 
-    if (error) return res.status(500).json({ error: error.message });
-    if (!updatedProperty) return res.status(404).json({ error: 'Imóvel não encontrado.' });
-    
-    let actualDesc = updatedProperty.descricao;
-    let images = [];
-    if (typeof actualDesc === 'string' && actualDesc.includes('|||IMAGES:')) {
-        const parts = actualDesc.split('|||IMAGES:');
-        actualDesc = parts[0];
-        try { images = JSON.parse(parts[1]); } catch(e) {}
-    } else if (updatedProperty.images) {
-        images = updatedProperty.images;
+      const { data: updatedProperty, error } = await supabaseServer.from('properties').update({
+         nome, 
+         valor: Number(valor), 
+         localizacao, 
+         descricao: finalDesc,
+         images: imageUrls
+      }).eq('id', Number(id)).select().maybeSingle();
+
+      if (error) return res.status(500).json({ error: error.message });
+      if (!updatedProperty) return res.status(404).json({ error: 'Imóvel não encontrado.' });
+      
+      res.json(sanitizeProperty(updatedProperty));
+    } catch (err: any) {
+      console.error('[Properties PUT Error]', err);
+      res.status(500).json({ error: 'Erro no servidor: ' + err.message });
     }
-    updatedProperty.descricao = actualDesc;
-    updatedProperty.images = images;
-    
-    res.json(updatedProperty);
   });
 
   app.delete('/api/properties/:id', async (req, res) => {
@@ -840,22 +864,7 @@ async function startServer() {
       contratoId: l.contrato_id
     });
     
-    const mappedProperties = (properties || []).map(p => {
-        let actualDesc = p.descricao;
-        let images = [];
-        if (typeof p.descricao === 'string' && p.descricao.includes('|||IMAGES:')) {
-            const parts = p.descricao.split('|||IMAGES:');
-            actualDesc = parts[0];
-            try { images = JSON.parse(parts[1]); } catch(e) {}
-        } else if (p.images) {
-            images = p.images;
-        }
-        return {
-            ...p,
-            descricao: actualDesc,
-            images
-        };
-    });
+    const mappedProperties = (properties || []).map(p => sanitizeProperty(p));
 
     res.json({
         clients: clients || [],
@@ -884,93 +893,21 @@ async function startServer() {
     }
   });
 
-  app.post('/api/contracts/pay/:contractId/:installmentNum', async (req, res) => {
-    const { contractId, installmentNum } = req.params;
-    const { data: contractRaw, error } = await supabaseServer.from('contracts').select('*').eq('id', Number(contractId)).maybeSingle();
-    
-    if (error || !contractRaw) return res.status(404).json({ error: 'Contrato não encontrado' });
-    const contract = mapContract(contractRaw);
 
-    const installmentIdx = contract.installments.findIndex((i: any) => i.numero === Number(installmentNum));
-    if (installmentIdx === -1) return res.status(404).json({ error: 'Parcela não encontrada' });
-
-    contract.installments[installmentIdx].pago = true;
-    
-    await supabaseServer.from('contracts').update({ installments: contract.installments }).eq('id', Number(contractId));
-    
-    res.json({ success: true });
-  });
-
-  app.post('/api/contracts/update-interest-rate', async (req, res) => {
-    const { novaTaxa, adminId } = req.body;
-    
-    const { data: affectedContracts } = await supabaseServer
-        .from('contracts')
-        .select('*')
-        .eq('status', 'ATIVO')
-        .eq('tipo_amortizacao', AmortizationType.PRICE);
-    
-    if (!affectedContracts) return res.json({ success: true, count: 0 });
-
-    for (const contract of affectedContracts) {
-        const paidInstallments = contract.installments.filter((i: any) => i.pago);
-        const pendingInstallments = contract.installments.filter((i: any) => !i.pago);
-        
-        if (pendingInstallments.length === 0) continue;
-
-        let currentBalance = contract.valor_financiado;
-        if (paidInstallments.length > 0) {
-            const lastPaid = paidInstallments.sort((a: any, b: any) => b.numero - a.numero)[0];
-            currentBalance = lastPaid.saldoDevedor;
-        }
-
-        const remainingPeriods = pendingInstallments.length;
-        const taxa = novaTaxa / 100;
-
-        const pmt = currentBalance * (taxa * Math.pow(1 + taxa, remainingPeriods)) / (Math.pow(1 + taxa, remainingPeriods) - 1);
-        const valorParcelaFixa = Number(pmt.toFixed(2));
-
-        let runningBalance = currentBalance;
-        
-        pendingInstallments.forEach((inst: any, idx: number) => {
-            const juros = Number((runningBalance * taxa).toFixed(2));
-            let amortizacao = Number((valorParcelaFixa - juros).toFixed(2));
-            if (idx === pendingInstallments.length - 1) amortizacao = runningBalance;
-            runningBalance = Number((runningBalance - amortizacao).toFixed(2));
-            inst.juros = juros;
-            inst.amortizacao = amortizacao;
-            inst.valorTotal = Number((amortizacao + juros).toFixed(2));
-            inst.saldoDevedor = Math.max(0, runningBalance);
-        });
-
-        await supabaseServer.from('contracts').update({
-            taxa_juros: novaTaxa,
-            installments: contract.installments
-        }).eq('id', contract.id);
-
-        await supabaseServer.from('update_logs').insert({
-            tipo: 'ATUALIZACAO_TAXA',
-            descricao: `Taxa do contrato ${contract.id} alterada para ${novaTaxa}%`,
-            contrato_id: contract.id
-        });
-    }
-
-    res.json({ success: true, count: affectedContracts.length });
-  });
 
   app.post('/api/contracts', upload.array('files', 5), async (req, res) => {
     console.log('[API] Registrando contrato:', req.body);
-    const { clientId, propertyId, valorImovel, valorEntrada, taxaJuros, numParcelas, tipoAmortizacao, dataInicio, corretorMatricula, tipoContrato } = req.body;
+    const { clientId, propertyId, valorImovel, corretorMatricula, tipoContrato } = req.body;
     
     const files = req.files as Express.Multer.File[];
     const pdfUrls: string[] = [];
     if (files && files.length > 0) {
        const dir = path.join(process.cwd(), 'public', 'media');
-       if (!require('fs').existsSync(dir)) require('fs').mkdirSync(dir, { recursive: true });
+       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
        for (const file of files) {
           const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9) + '.pdf';
           const outPath = path.join(dir, uniqueSuffix);
-          require('fs').writeFileSync(outPath, file.buffer);
+          fs.writeFileSync(outPath, file.buffer);
           pdfUrls.push(`/media/${uniqueSuffix}`);
        }
     }
@@ -979,38 +916,17 @@ async function startServer() {
       return res.status(400).json({ error: 'Cliente, Imóvel e Corretor são obrigatórios' });
     }
 
-    const financedAmount = Number(valorImovel) - Number(valorEntrada);
-    
-    let installments = [];
-    try {
-      if (tipoAmortizacao === AmortizationType.SAC) {
-        installments = calculateSAC(financedAmount, Number(taxaJuros), Number(numParcelas), dataInicio);
-      } else {
-        installments = calculatePrice(financedAmount, Number(taxaJuros), Number(numParcelas), dataInicio);
-      }
-    } catch (calcErr: any) {
-      console.error('[Amortization Error]', calcErr);
-      return res.status(400).json({ error: 'Erro ao calcular parcelas: ' + calcErr.message });
-    }
-
-    const statusFinanceiro = 'Em Pagamento';
     const finalTipoContrato = tipoContrato || 'VENDA';
 
     const insertData: any = {
       client_id: Number(clientId),
       property_id: Number(propertyId),
-      valor_imovel: Number(valorImovel),
-      valor_entrada: Number(valorEntrada),
-      valor_financiado: financedAmount,
-      taxa_juros: Number(taxaJuros),
-      num_parcelas: Number(numParcelas),
-      tipo_amortizacao: tipoAmortizacao,
-      data_inicio: dataInicio,
-      installments,
+      corretor_matricula: corretorMatricula,
+      valor_imovel: Number(valorImovel) || 0,
       status: 'ATIVO',
       data_contrato: new Date().toISOString(),
       tipo_contrato: finalTipoContrato,
-      status_financeiro: statusFinanceiro
+      status_financeiro: 'ATIVO'
     };
 
     if (pdfUrls.length > 0) {
@@ -1041,12 +957,15 @@ async function startServer() {
     } else if (finalTipoContrato === 'Aluguel') {
         regraAplicada = 'Aluguel (15%)';
         valorComissao = Number(valorImovel) * 0.15;
-    } else if (finalTipoContrato === 'Minha Casa Minha Vida') {
+    } else if (finalTipoContrato.includes('Minha Casa Minha Vida') || finalTipoContrato.includes('MCMV')) {
         regraAplicada = 'MCMV (0,5%)';
         valorComissao = Number(valorImovel) * 0.005;
-    } else if (finalTipoContrato === 'De Terceiros') {
+    } else if (finalTipoContrato.includes('Terceiros')) {
         regraAplicada = 'Imóvel de Terceiros (Definir Valor)';
         valorComissao = 0;
+    } else {
+        regraAplicada = `${finalTipoContrato} (1%)`;
+        valorComissao = Number(valorImovel) * 0.01;
     }
 
     const { error: comissaoError } = await supabaseServer.from('comissoes').insert({
@@ -1056,6 +975,8 @@ async function startServer() {
         corretor_matricula: corretorMatricula,
         regra_aplicada: regraAplicada,
         valor_comissao: valorComissao,
+        valor_calculado: valorComissao,
+        valor_personalizado: valorComissao > 0 ? valorComissao : null,
         status: 'PENDENTE'
     });
 
@@ -1108,9 +1029,97 @@ async function startServer() {
       try {
           // Apenas atualizando informações básicas, saldo é movimentação!
           await supabaseServer.from('materials').update({ nome, categoria, updated_at: new Date().toISOString() }).eq('id', Number(id));
+          
+          const memIndex = inMemoryMaterials.findIndex(m => m.id === Number(id));
+          if (memIndex !== -1) {
+              inMemoryMaterials[memIndex] = { ...inMemoryMaterials[memIndex], nome, categoria, updated_at: new Date().toISOString() };
+          }
           res.json({ success: true });
       } catch (e: any) {
-          res.status(500).json({ error: e.message });
+          const memIndex = inMemoryMaterials.findIndex(m => m.id === Number(id));
+          if (memIndex !== -1) {
+              inMemoryMaterials[memIndex] = { ...inMemoryMaterials[memIndex], nome, categoria, updated_at: new Date().toISOString() };
+              res.json({ success: true });
+          } else {
+              res.status(500).json({ error: e.message });
+          }
+      }
+  });
+
+  app.delete('/api/materials/:id', async (req, res) => {
+      const { id } = req.params;
+      try {
+          // 1. Obter informações do material antes da exclusão
+          const { data: mat } = await supabaseServer.from('materials').select('*').eq('id', Number(id)).maybeSingle();
+          const memMat = inMemoryMaterials.find(m => m.id === Number(id));
+          const nomeMaterial = mat?.nome || memMat?.nome || 'Material Desconhecido';
+          const saldo = mat?.saldo_unidades ?? memMat?.saldo_unidades ?? 0;
+          const uMedida = mat?.unidade_medida ?? memMat?.unidade_medida ?? 'UN';
+
+          // 2. Tentar atualizar as movimentações antigas com o nome do material na justificativa para desvincular do material_id sem perder os dados de auditoria
+          try {
+              const { data: existingMovs } = await supabaseServer.from('material_movements').select('*').eq('material_id', Number(id));
+              if (existingMovs && existingMovs.length > 0) {
+                  for (const m of existingMovs) {
+                      const novaJustificativa = `[${nomeMaterial}] ${m.justificativa || ''}`;
+                      await supabaseServer.from('material_movements').update({ 
+                          material_id: null,
+                          justificativa: novaJustificativa 
+                      }).eq('id', m.id);
+                  }
+              }
+          } catch (errMov: any) {
+              console.warn("Não foi possível atualizar as movimentações antigas para null, caindo no fallback delete:", errMov.message);
+              // Caso haja restrição NOT NULL ou similar, deletamos as antigas para a deleção do material prosseguir normalmente
+              await supabaseServer.from('material_movements').delete().eq('material_id', Number(id));
+          }
+
+          // 3. Registrar a ação de exclusão do material na auditoria de movimentações generalizadas
+          const auditJustificativa = `EXCLUSÃO DO MATERIAL: O material '${nomeMaterial}' (Saldo em estoque era de ${saldo} ${uMedida}) foi excluído do sistema permanentemente pelo Administrador.`;
+          try {
+              await supabaseServer.from('material_movements').insert({
+                  material_id: null,
+                  tipo_operacao: 'EXCLUSÃO',
+                  quantidade: Number(saldo),
+                  funcionario_matricula: 'ADMIN',
+                  justificativa: auditJustificativa
+              });
+          } catch (errIns: any) {
+              console.warn("Erro ao registrar auditoria de exclusão do material no Supabase:", errIns.message);
+          }
+
+          // 4. Deletar o material fisicamente da tabela materials
+          await supabaseServer.from('materials').delete().eq('id', Number(id));
+          
+          // 5. Atualizar registros em memória (para o fallback de banco offline de auditorias)
+          inMemoryMovements = inMemoryMovements.map(mov => {
+              if (mov.material_id === Number(id)) {
+                  return {
+                      ...mov,
+                      material_id: null,
+                      justificativa: `[${nomeMaterial}] ${mov.justificativa || ''}`
+                  };
+              }
+              return mov;
+          });
+
+          // Adicionar o evento de exclusão ao início do log em memória
+          inMemoryMovements.unshift({
+              id: Date.now(),
+              material_id: null,
+              tipo_operacao: 'EXCLUSÃO',
+              quantidade: Number(saldo),
+              funcionario_matricula: 'ADMIN',
+              justificativa: auditJustificativa,
+              created_at: new Date().toISOString()
+          });
+
+          inMemoryMaterials = inMemoryMaterials.filter(m => m.id !== Number(id));
+          
+          res.json({ success: true });
+      } catch (e: any) {
+          inMemoryMaterials = inMemoryMaterials.filter(m => m.id !== Number(id));
+          res.json({ success: true });
       }
   });
 
@@ -1201,15 +1210,31 @@ async function startServer() {
 
   app.put('/api/comissoes/:id', async (req, res) => {
     const { id } = req.params;
-    const { valor_comissao } = req.body;
-    const { data: comissao, error } = await supabaseServer.from('comissoes').update({
-        valor_comissao: Number(valor_comissao),
-        regra_aplicada: 'Imóvel de Terceiros (Valor Definido)',
-        status: 'PENDENTE'
-    }).eq('id', Number(id)).select().maybeSingle();
+    const { valor_comissao, valor_personalizado, status } = req.body;
+    
+    const updateObj: any = {};
+    if (valor_personalizado !== undefined || valor_comissao !== undefined) {
+      const val = valor_personalizado !== undefined ? Number(valor_personalizado) : Number(valor_comissao);
+      updateObj.valor_comissao = val;
+      updateObj.valor_calculado = val;
+      updateObj.valor_personalizado = val;
+      updateObj.regra_aplicada = 'Ajuste Manual';
+    }
+    if (status !== undefined) {
+      updateObj.status = status;
+    }
+
+    const { data: comissao, error } = await supabaseServer.from('comissoes').update(updateObj).eq('id', Number(id)).select().maybeSingle();
     
     if (error) return res.status(500).json({ error: error.message });
     res.json(comissao);
+  });
+
+  app.delete('/api/comissoes/:id', async (req, res) => {
+    const { id } = req.params;
+    const { error } = await supabaseServer.from('comissoes').delete().eq('id', Number(id));
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true });
   });
 
   // ==============================================

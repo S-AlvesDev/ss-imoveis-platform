@@ -281,9 +281,41 @@ export default function SimuladorMCMV() {
                       </div>
                     </div>
                     
-                    <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl mb-6 shadow-sm">
-                        <strong className="block text-sm mb-1 uppercase tracking-wider text-blue-900">Estratégia do Motor Bancário:</strong>
-                        <p className="text-sm text-blue-800 font-medium">{result.resumo.estrategia_aprovacao}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                      <div className="bg-blue-50 border border-blue-200 p-5 rounded-2xl shadow-sm">
+                          <strong className="block text-xs mb-2 uppercase tracking-wider text-blue-900 font-bold">Diagnóstico de Viabilidade</strong>
+                          
+                          <div className="flex items-end justify-between mb-2">
+                             <div>
+                               <div className="text-sm text-blue-800 font-medium">Score de Crédito (MCMV)</div>
+                               <div className="text-3xl font-black text-[#005CA9]">{result.resumo.score_viabilidade}/100</div>
+                             </div>
+                             <div className="text-right">
+                                <div className="text-xs text-blue-700 font-bold uppercase">Chance de Aprovação</div>
+                                <div className={`px-3 py-1 mt-1 rounded text-sm font-bold inline-block
+                                   ${result.resumo.score_viabilidade > 75 ? 'bg-green-100 text-green-700' :
+                                     result.resumo.score_viabilidade > 50 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>
+                                   {result.resumo.chance_aprovacao}
+                                </div>
+                             </div>
+                          </div>
+                          
+                          <div className="w-full bg-blue-200 rounded-full h-2 mt-2">
+                            <div className="bg-[#005CA9] h-2 rounded-full" style={{ width: `${result.resumo.score_viabilidade}%` }}></div>
+                          </div>
+                      </div>
+
+                      <div className="bg-gray-50 border border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col justify-center">
+                          <strong className="block text-xs mb-2 uppercase tracking-wider text-gray-500 font-bold">Motor Bancário & Estratégia</strong>
+                          <p className="text-sm text-gray-800 font-medium leading-relaxed">{result.resumo.estrategia_aprovacao}</p>
+                          <div className="mt-3 flex gap-2 w-full text-xs font-mono text-gray-400 flex-wrap">
+                            {result.resumo.tentativas_realizadas?.map((t: string, i: number) => (
+                              <span key={i} className="bg-white border border-gray-200 px-2 py-1 rounded truncate max-w-full" title={t}>
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
@@ -307,6 +339,17 @@ export default function SimuladorMCMV() {
                              <span className="block text-[10px] text-gray-500 font-bold uppercase">Última Parcela</span>
                              <span className="text-xl font-black text-gray-800">R$ {result.resumo.ultima_parcela.toLocaleString('pt-BR', {minimumFractionDigits:2})}</span>
                            </div>
+                         </div>
+
+                         <div className="flex gap-4 mt-4">
+                            <div className="flex-1 bg-gray-50 border border-gray-100 rounded-lg p-3 text-center">
+                              <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Comprometimento de Renda</div>
+                              <div className="text-lg font-black text-gray-800 mt-1">{result.resumo.comprometimento_renda.toFixed(1)}%</div>
+                            </div>
+                            <div className="flex-1 bg-gray-50 border border-gray-100 rounded-lg p-3 text-center">
+                              <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">LTV (Financ/Imóvel)</div>
+                              <div className="text-lg font-black text-gray-800 mt-1">{result.resumo.ltv.toFixed(1)}%</div>
+                            </div>
                          </div>
                        </div>
 

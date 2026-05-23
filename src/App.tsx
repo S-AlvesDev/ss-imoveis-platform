@@ -36,12 +36,12 @@ import {
   ThumbsUp,
   MessageCircle,
   Facebook,
-  Instagram
+  Instagram,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
-import { AmortizationType } from './lib/finance';
 import DashboardCliente from './components/DashboardCliente';
 import EstoqueAdmin from './components/EstoqueAdmin';
 import AlmoxarifadoView from './components/AlmoxarifadoView';
@@ -66,10 +66,38 @@ const ICONS = {
 
 const PropertyGallery = ({ images, status }: { images?: string[], status: string }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [hasError, setHasError] = useState(false);
 
-  if (!images || images.length === 0) {
+  React.useEffect(() => {
+    setHasError(false);
+  }, [images, currentIndex]);
+
+  let imageList: string[] = [];
+  if (images) {
+    if (Array.isArray(images)) {
+      imageList = images;
+    } else if (typeof images === 'string') {
+      try {
+        const parsed = JSON.parse(images);
+        if (Array.isArray(parsed)) {
+          imageList = parsed;
+        } else if (parsed) {
+          imageList = [parsed];
+        }
+      } catch (e) {
+        const str = (images as string).trim();
+        if (str.startsWith('{') && str.endsWith('}')) {
+          imageList = str.slice(1, -1).split(',').map(s => s.trim().replace(/^['"]|['"]$/g, ''));
+        } else if (str) {
+          imageList = [str];
+        }
+      }
+    }
+  }
+
+  if (imageList.length === 0 || hasError) {
     return (
-      <div className="w-full h-48 bg-gray-50 flex flex-col items-center justify-center text-gray-300 rounded-t-lg">
+      <div className="w-full h-48 bg-gray-50 flex flex-col items-center justify-center text-gray-400 rounded-t-lg border-b border-gray-100">
         <Home size={32} className="mb-2 text-blue-200" />
         <span className="text-[10px] font-bold uppercase tracking-widest text-blue-300">Sem imagens</span>
       </div>
@@ -78,47 +106,53 @@ const PropertyGallery = ({ images, status }: { images?: string[], status: string
 
   const nextImage = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setCurrentIndex((prev) => (prev + 1) % images.length);
+    setCurrentIndex((prev) => (prev + 1) % imageList.length);
   };
 
   const prevImage = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setCurrentIndex((prev) => (prev - 1 + images.length) % images.length);
+    setCurrentIndex((prev) => (prev - 1 + imageList.length) % imageList.length);
   };
 
   return (
-    <div className="relative w-full h-48 bg-gray-200 overflow-hidden rounded-t-lg group">
-      <img src={images[currentIndex]} alt="imóvel" className={`w-full h-full object-cover transition-transform duration-500 ${status !== 'DISPONÍVEL' ? 'grayscale opacity-80' : 'group-hover:scale-105'}`} />
+    <div className="relative w-full h-48 bg-slate-100/50 overflow-hidden rounded-t-lg group flex items-center justify-center border-b border-gray-100">
+      <img 
+        src={imageList[currentIndex]} 
+        id="property-gallery-app-image"
+        alt="imóvel" 
+        onError={() => setHasError(true)}
+        className={`max-w-full max-h-full object-contain transition-transform duration-500 ${status !== 'DISPONÍVEL' ? 'grayscale opacity-80' : ''}`} 
+      />
       
-      {images.length > 1 && (
+      {imageList.length > 1 && (
         <>
-          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-300 pointer-events-none" />
+          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-300 pointer-events-none" />
           <button 
             type="button"
             onClick={prevImage}
-            className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 text-white rounded-full p-2 opacity-0 group-hover:opacity-100 hover:bg-black/70 hover:scale-110 transition-all z-10 focus:outline-none"
+            className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 text-white rounded-full p-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-black/80 hover:scale-110 transition-all z-10 focus:outline-none shadow-md"
           >
             <ChevronLeft size={16} />
           </button>
           <button 
             type="button"
             onClick={nextImage}
-            className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/40 text-white rounded-full p-2 opacity-0 group-hover:opacity-100 hover:bg-black/70 hover:scale-110 transition-all z-10 focus:outline-none"
+            className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 text-white rounded-full p-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-black/80 hover:scale-110 transition-all z-10 focus:outline-none shadow-md"
           >
             <ChevronRight size={16} />
           </button>
           
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex space-x-1.5 opacity-0 group-hover:opacity-100 transition-all z-10 pointer-events-none">
-            {images.map((_, idx) => (
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex space-x-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all z-10 pointer-events-none bg-black/30 px-2 py-0.5 rounded-full backdrop-blur-sm">
+            {imageList.map((_, idx) => (
               <div 
                 key={idx} 
-                className={`w-1.5 h-1.5 rounded-full transition-all ${idx === currentIndex ? 'bg-white scale-125' : 'bg-white/50'}`} 
+                className={`w-1.5 h-1.5 rounded-full transition-all ${idx === currentIndex ? 'bg-white scale-125' : 'bg-white/40'}`} 
               />
             ))}
           </div>
           
-          <div className="absolute top-2 right-2 bg-black/50 text-white text-[9px] font-bold px-2 py-1 rounded-full pointer-events-none shadow-sm backdrop-blur-sm">
-            {currentIndex + 1} / {images.length}
+          <div className="absolute top-2 right-2 bg-black/60 text-white text-[9px] font-bold px-2 py-1 rounded-full pointer-events-none shadow-sm backdrop-blur-sm">
+            {currentIndex + 1} / {imageList.length}
           </div>
         </>
       )}
@@ -172,24 +206,22 @@ export default function App() {
     return () => clearInterval(timer);
   }, [resendCountdown]);
   
-  // Distrato State
-  const [showDistratoModal, setShowDistratoModal] = useState(false);
-  const [distratoContract, setDistratoContract] = useState<any>(null);
-  const [distratoSummary, setDistratoSummary] = useState<any>(null);
-  const [distratoOption, setDistratoOption] = useState<'50' | '80'>('80');
-  const [distratoInstallments, setDistratoInstallments] = useState(12);
-  const [isProcessingDistrato, setIsProcessingDistrato] = useState(false);
-  
   // Login Form State
   const [loginForm, setLoginForm] = useState({ matricula: '', senha: '' });
   const [loginError, setLoginError] = useState('');
 
   // Property Form State
   const [showPropertyModal, setShowPropertyModal] = useState(false);
-  const [propertyForm, setPropertyForm] = useState({ id: null as number | null, nome: '', valor: 0, localizacao: '', descricao: '' });
+  const [propertyForm, setPropertyForm] = useState({ id: null as number | null, nome: '', valor: 0, localizacao: '', descricao: '', images: [] as string[], tipo: 'Lote' });
+  const [isConfirmingDeleteProperty, setIsConfirmingDeleteProperty] = useState(false);
 
   // Contract Filter State
   const [contractFilter, setContractFilter] = useState<'TODOS' | 'ATIVO' | 'ATRASO' | 'DISTRATADO'>('TODOS');
+  const [contractSearchText, setContractSearchText] = useState('');
+  const [confirmingCancelId, setConfirmingCancelId] = useState<number | null>(null);
+  const [showDistratoModal, setShowDistratoModal] = useState(false);
+  const [distratoContract, setDistratoContract] = useState<any>(null);
+  const [distratoSummary, setDistratoSummary] = useState<any>(null);
 
   // Property Filter State
   const [propertyFilterStatus, setPropertyFilterStatus] = useState('TODOS');
@@ -200,24 +232,11 @@ export default function App() {
     clientId: '',
     propertyId: '',
     valorImovel: 0,
-    valorEntrada: 0,
-    taxaJuros: 0.8,
-    numParcelas: 120,
-    tipoAmortizacao: AmortizationType.SAC,
-    dataInicio: new Date().toISOString().split('T')[0],
     corretorMatricula: '',
     tipoContrato: 'Lote',
-    statusFinanceiro: 'Em Pagamento'
   });
 
   const [staffForm, setStaffForm] = useState({ nome: '', email: '', matricula: '', senha: '', role: 'CORRETOR_ATENDIMENTO' });
-
-  // Mass Update State
-  const [massUpdateTaxa, setMassUpdateTaxa] = useState(0.8);
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
-
-
 
   const loadApplicationData = async () => {
     try {
@@ -341,12 +360,7 @@ export default function App() {
       const formData = new FormData();
       formData.append('clientId', contractForm.clientId);
       formData.append('propertyId', contractForm.propertyId);
-      formData.append('valorImovel', contractForm.valorImovel);
-      formData.append('valorEntrada', contractForm.valorEntrada);
-      formData.append('taxaJuros', contractForm.taxaJuros);
-      formData.append('numParcelas', contractForm.numParcelas);
-      formData.append('tipoAmortizacao', contractForm.tipoAmortizacao);
-      formData.append('dataInicio', contractForm.dataInicio);
+      formData.append('valorImovel', String(contractForm.valorImovel));
       formData.append('corretorMatricula', contractForm.corretorMatricula);
       formData.append('tipoContrato', contractForm.tipoContrato);
       
@@ -371,14 +385,8 @@ export default function App() {
           clientId: '',
           propertyId: '',
           valorImovel: 0,
-          valorEntrada: 0,
-          taxaJuros: 0.8,
-          numParcelas: 120,
-          tipoAmortizacao: AmortizationType.SAC,
-          dataInicio: new Date().toISOString().split('T')[0],
           corretorMatricula: '',
-          tipoContrato: 'Lote',
-          statusFinanceiro: 'Em Pagamento'
+          tipoContrato: 'Lote'
         });
       } else {
         toast.error('Erro ao criar contrato: ' + (body.details || body.error || 'Erro desconhecido'));
@@ -409,26 +417,7 @@ export default function App() {
     }
   };
 
-  const handleMassUpdate = async () => {
-    setIsUpdating(true);
-    try {
-      const res = await fetch('/api/contracts/update-interest-rate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ novaTaxa: massUpdateTaxa, adminId: user.id })
-      });
-      if (res.ok) {
-          const result = await res.json();
-          toast.success(`${result.count} contratos atualizados com sucesso!`);
-          loadApplicationData();
-          setShowUpdateModal(false);
-      }
-    } catch (err) {
-      toast.error('Erro ao processar atualização em massa.');
-    } finally {
-      setIsUpdating(false);
-    }
-  };
+
 
   const handlePayInstallment = async (contractId: number, installmentNum: number) => {
     try {
@@ -935,7 +924,7 @@ export default function App() {
                 </button>
                 <button onClick={() => setView('controle-clientes')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'controle-clientes' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
                   <span className="mr-3"><MapPin size={20} /></span>
-                  <span className="text-sm font-medium">Controle Clientes</span>
+                  <span className="text-sm font-medium">Controle da Supervisão</span>
                 </button>
               </>
             )}
@@ -969,10 +958,7 @@ export default function App() {
               <span className="mr-3">{ICONS.staff}</span>
               <span className="text-sm font-medium">Gestão de Equipe</span>
             </button>
-            <button onClick={() => setView('admin-settings')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'admin-settings' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
-              <span className="mr-3">{ICONS.settings}</span>
-              <span className="text-sm font-medium">Configuração Global</span>
-            </button>
+
           </>
         )}
 
@@ -989,28 +975,28 @@ export default function App() {
     </aside>
   );
 
-  const isOverdueByMonths = (installments: any[], months: number) => {
-    const today = new Date();
-    return installments.some(i => {
-      if (i.pago) return false;
-      const dueDate = new Date(i.vencimento);
-      const diffTime = Math.abs(today.getTime() - dueDate.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return dueDate < today && diffDays > (months * 30);
-    });
-  };
-
   const getContractStatus = (contract: any) => {
-    if (contract.status === 'DISTRATADO') return 'DISTRATADO';
-    const isOverdue = contract.installments.some((i: any) => !i.pago && new Date(i.vencimento) < new Date());
-    return isOverdue ? 'ATRASO' : 'ATIVO';
+    return contract.status || 'ATIVO';
   };
 
   const filteredContracts = data.contracts.filter((c: any) => {
-    if (contractFilter === 'TODOS') return true;
-    if (contractFilter === 'DISTRATADO') return c.status === 'DISTRATADO';
-    if (contractFilter === 'ATIVO') return getContractStatus(c) === 'ATIVO';
-    if (contractFilter === 'ATRASO') return getContractStatus(c) === 'ATRASO';
+    let statusMatch = true;
+    if (contractFilter === 'DISTRATADO') statusMatch = c.status === 'DISTRATADO';
+    else if (contractFilter === 'ATIVO') statusMatch = (c.status !== 'DISTRATADO');
+    
+    if (!statusMatch) return false;
+
+    if (contractSearchText.trim() !== '') {
+      const searchLower = contractSearchText.toLowerCase();
+      const client = data.clients.find((cl: any) => cl.id === c.clientId);
+      const property = data.properties.find((p: any) => p.id === c.propertyId);
+      
+      const clientName = client ? client.nome.toLowerCase() : '';
+      const propertyName = property ? property.nome.toLowerCase() : '';
+      
+      return clientName.includes(searchLower) || propertyName.includes(searchLower);
+    }
+
     return true;
   });
 
@@ -1113,9 +1099,8 @@ export default function App() {
                 exit={{ opacity: 0, x: -10 }}
                 className="space-y-6"
               >
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   <StatCard title="Contratos Ativos" value={data.contracts.filter((c:any) => c.status === 'ATIVO').length} color="#2563eb" icon={<FileText />} />
-                  <StatCard title="Parcelas em Atraso" value={data.contracts.filter((c:any) => getContractStatus(c) === 'ATRASO').length} color="#ef4444" icon={<AlertCircle />} />
                   <StatCard title="Contratos Distratados" value={data.contracts.filter((c:any) => c.status === 'DISTRATADO').length} color="#64748b" icon={<TrendingDown />} />
                   <StatCard title="Total de Clientes" value={data.clients.length} color="#10b981" icon={<Users />} />
                 </div>
@@ -1126,9 +1111,8 @@ export default function App() {
                      <div className="h-64" style={{ minWidth: 0, minHeight: 0 }}>
                         <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                            <BarChart data={[
-                              { name: 'Ativos', total: data.contracts.filter((c:any) => getContractStatus(c) === 'ATIVO').length, fill: '#10b981' },
-                              { name: 'Atrasados', total: data.contracts.filter((c:any) => getContractStatus(c) === 'ATRASO').length, fill: '#ef4444' },
-                              { name: 'Distratados', total: data.contracts.filter((c:any) => getContractStatus(c) === 'DISTRATADO').length, fill: '#64748b' },
+                              { name: 'Ativos', total: data.contracts.filter((c:any) => c.status === 'ATIVO').length, fill: '#10b981' },
+                              { name: 'Distratados', total: data.contracts.filter((c:any) => c.status === 'DISTRATADO').length, fill: '#64748b' },
                            ]}>
                               <CartesianGrid strokeDasharray="3 3" vertical={false} />
                               <XAxis dataKey="name" axisLine={false} tickLine={false} />
@@ -1175,7 +1159,7 @@ export default function App() {
                         <tr className="bg-gray-50 border-b border-gray-100 italic text-gray-500">
                           <th className="px-6 py-3 font-semibold">Cliente</th>
                           <th className="px-6 py-3 font-semibold">Propriedade</th>
-                          <th className="px-6 py-3 font-semibold">Valor Financ.</th>
+                          <th className="px-6 py-3 font-semibold">Data da Atividade</th>
                           <th className="px-6 py-3 font-semibold">Status</th>
                         </tr>
                       </thead>
@@ -1185,17 +1169,17 @@ export default function App() {
                             <td colSpan={4} className="px-6 py-10 text-center text-gray-400 italic">Nenhum contrato registrado recentemente</td>
                           </tr>
                         ) : data.contracts.map((c: any) => {
-                          const status = getContractStatus(c);
+                          const status = c.status || 'ATIVO';
                           return (
                             <tr key={c.id} className="hover:bg-blue-50 transition-colors">
                               <td className="px-6 py-4 font-medium text-gray-800">{data.clients.find((cl:any) => cl.id === c.clientId)?.nome}</td>
                               <td className="px-6 py-4 text-gray-600">{data.properties.find((p:any) => p.id === c.propertyId)?.nome}</td>
-                              <td className="px-6 py-4 font-mono text-blue-600 font-bold">R$ {(c.valorFinanciado ?? 0).toLocaleString()}</td>
+                              <td className="px-6 py-4 font-mono text-blue-600 font-bold text-xs">
+                                {c.dataContrato ? new Date(c.dataContrato).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Não informada'}
+                              </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 {status === 'DISTRATADO' ? (
                                   <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] font-bold border border-gray-200">DISTRATADO</span>
-                                ) : status === 'ATRASO' ? (
-                                  <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-[10px] font-bold border border-red-200">EM ATRASO</span>
                                 ) : (
                                   <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-[10px] font-bold border border-green-200">ATIVO</span>
                                 )}
@@ -1364,7 +1348,11 @@ export default function App() {
                       <option value="DISPONÍVEL">Disponíveis</option>
                       <option value="VENDIDO">Vendidos</option>
                     </select>
-                    <button onClick={() => setShowPropertyModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 flex items-center">
+                    <button onClick={() => {
+                      setPropertyForm({ id: null, nome: '', valor: 0, localizacao: '', descricao: '', images: [], tipo: 'Lote' });
+                      setIsConfirmingDeleteProperty(false);
+                      setShowPropertyModal(true);
+                    }} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 flex items-center">
                       <Plus size={16} className="mr-1" /> CADASTRAR IMÓVEL
                     </button>
                     <button onClick={() => {
@@ -1392,12 +1380,17 @@ export default function App() {
                       <div>
                         <div className="-mx-6 -mt-6 mb-4 relative">
                           <PropertyGallery images={p.images} status={p.status} />
-                          <div className="absolute top-4 left-4">
+                          <div className="absolute top-4 left-4 flex items-center space-x-1.5">
                             <span className={`text-[9px] font-black px-2 py-1 rounded-full uppercase tracking-widest shadow-sm ${
                               p.status === 'DISPONÍVEL' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700 backdrop-blur-sm'
                             }`}>
                               {p.status}
                             </span>
+                            {p.tipo && (
+                              <span className="text-[9px] font-black px-2 py-1 rounded-full uppercase tracking-widest shadow-sm bg-blue-100 text-blue-700">
+                                {p.tipo}
+                              </span>
+                            )}
                           </div>
                         </div>
                         <h3 className="font-bold text-gray-800 mb-1">{p.nome}</h3>
@@ -1416,7 +1409,8 @@ export default function App() {
                         <span className="font-bold text-gray-400 uppercase">#{p.id}</span>
                         <button 
                            onClick={() => {
-                              setPropertyForm({ id: p.id, nome: p.nome, valor: p.valor, localizacao: p.localizacao, descricao: p.descricao });
+                              setPropertyForm({ id: p.id, nome: p.nome, valor: p.valor, localizacao: p.localizacao, descricao: p.descricao, images: p.images || [], tipo: p.tipo || 'Lote' });
+                              setIsConfirmingDeleteProperty(false);
                               setShowPropertyModal(true);
                            }}
                            className="text-blue-600 font-bold hover:underline"
@@ -1438,10 +1432,10 @@ export default function App() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   {/* Creation Form */}
                   <div className="lg:col-span-1 bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-                    <h2 className="font-bold text-gray-800 mb-6 flex items-center"><TrendingDown size={18} className="mr-2 text-blue-600"/> Registrar Contrato a Pagar</h2>
+                    <h2 className="font-bold text-gray-800 mb-6 flex items-center"><TrendingDown size={18} className="mr-2 text-blue-600"/> Registrar Contrato</h2>
                     <form onSubmit={handleCreateContract} className="space-y-4">
                       <div>
-                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Tipo de Contrato</label>
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Tipo do Imóvel / Lote</label>
                         <select 
                           required
                           className="w-full px-3 py-2 border rounded-md text-sm bg-white font-bold"
@@ -1449,22 +1443,11 @@ export default function App() {
                           onChange={e => setContractForm({...contractForm, tipoContrato: e.target.value})}
                         >
                           <option value="Lote">Lote</option>
-                          <option value="Aluguel">Aluguel</option>
+                          <option value="Casa">Casa</option>
+                          <option value="Apartamento">Apartamento</option>
                           <option value="Programa Minha Casa Minha Vida (MCMV)">Programa Minha Casa Minha Vida (MCMV)</option>
                           <option value="Imóvel de Terceiros">Imóvel de Terceiros</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Status Financeiro (Inicial)</label>
-                        <select 
-                          required
-                          className="w-full px-3 py-2 border rounded-md text-sm bg-white"
-                          value={contractForm.statusFinanceiro}
-                          onChange={e => setContractForm({...contractForm, statusFinanceiro: e.target.value})}
-                        >
-                          <option value="Em Pagamento">Em Pagamento</option>
-                          <option value="Financiado">Financiado</option>
-                          <option value="Atrasado">Atrasado</option>
+                          <option value="Aluguel">Aluguel</option>
                         </select>
                       </div>
                       <div>
@@ -1506,83 +1489,6 @@ export default function App() {
                           {data.properties.filter((p: any) => p.status === 'DISPONÍVEL').map((p: any) => <option key={p.id} value={p.id}>{p.nome}</option>)}
                         </select>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Valor Total</label>
-                          <input 
-                            type="number"
-                            required
-                            className="w-full px-3 py-2 border rounded-md text-sm"
-                            value={contractForm.valorImovel}
-                            onChange={(e) => {
-                              const val = Number(e.target.value);
-                              setContractForm({...contractForm, valorImovel: val});
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Valor Entrada</label>
-                          <input 
-                            type="number"
-                            required
-                            className="w-full px-3 py-2 border rounded-md text-sm"
-                            value={contractForm.valorEntrada}
-                            onChange={e => setContractForm({...contractForm, valorEntrada: Number(e.target.value)})}
-                          />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="col-span-2">
-                           <div className="bg-blue-50 p-2 rounded text-[10px] font-bold text-blue-700 flex justify-between uppercase">
-                             <span>Valor a Financiar:</span>
-                             <span>R$ {(contractForm.valorImovel - contractForm.valorEntrada).toLocaleString()}</span>
-                           </div>
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Taxa (% AM)</label>
-                          <input 
-                            type="number"
-                            step="0.01"
-                            required
-                            className="w-full px-3 py-2 border rounded-md text-sm"
-                            value={contractForm.taxaJuros}
-                            onChange={e => setContractForm({...contractForm, taxaJuros: Number(e.target.value)})}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Parcelas</label>
-                          <input 
-                            type="number"
-                            required
-                            className="w-full px-3 py-2 border rounded-md text-sm"
-                            value={contractForm.numParcelas}
-                            onChange={e => setContractForm({...contractForm, numParcelas: Number(e.target.value)})}
-                          />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="col-span-1">
-                          <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Sistema</label>
-                          <select 
-                            className="w-full px-3 py-2 border rounded-md text-sm bg-white"
-                            value={contractForm.tipoAmortizacao}
-                            onChange={e => setContractForm({...contractForm, tipoAmortizacao: e.target.value as AmortizationType})}
-                          >
-                            <option value={AmortizationType.SAC}>SAC</option>
-                            <option value={AmortizationType.PRICE}>PRICE</option>
-                          </select>
-                        </div>
-                        <div className="col-span-1">
-                          <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Data Início</label>
-                          <input 
-                            type="date"
-                            required
-                            className="w-full px-3 py-2 border rounded-md text-sm"
-                            value={contractForm.dataInicio}
-                            onChange={e => setContractForm({...contractForm, dataInicio: e.target.value})}
-                          />
-                        </div>
-                      </div>
                       <div>
                         <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Anexar Contratos PDF (Opcional)</label>
                         <input
@@ -1599,7 +1505,7 @@ export default function App() {
 
                   {/* List */}
                   <div className="lg:col-span-2 space-y-6">
-                    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-wrap gap-2 items-center justify-between">
+                    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col md:flex-row gap-3 items-center justify-between">
                        <div className="flex flex-wrap gap-2">
                          <button 
                            onClick={() => setContractFilter('TODOS')}
@@ -1614,24 +1520,31 @@ export default function App() {
                            Ativos
                          </button>
                          <button 
-                           onClick={() => setContractFilter('ATRASO')}
-                           className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase transition-all ${contractFilter === 'ATRASO' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-                         >
-                           Em Atraso
-                         </button>
-                         <button 
                            onClick={() => setContractFilter('DISTRATADO')}
                            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase transition-all ${contractFilter === 'DISTRATADO' ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
                          >
                            Distratados
                          </button>
                        </div>
+
+                       <div className="relative w-full md:w-64">
+                         <input 
+                           type="text"
+                           placeholder="Buscar por cliente ou imóvel..."
+                           value={contractSearchText}
+                           onChange={e => setContractSearchText(e.target.value)}
+                           className="w-full pl-8 pr-3 py-1.5 text-xs border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                         />
+                         <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
+                       </div>
+
                        <button onClick={() => {
                           let csv = "ID,Cliente,Propriedade,Valor,Corretor,Status\n";
                           data.contracts.forEach((c:any) => { 
                              const client = data.clients.find((cl:any) => cl.id === c.clientId)?.nome || 'N/A';
                              const prop = data.properties.find((p:any) => p.id === c.propertyId)?.nome || 'N/A';
-                             csv += `${c.id},"${client}","${prop}",${c.valorFinanciado},"${c.corretorMatricula || ''}","${c.status}"\n`; 
+                             const val = c.valor_imovel ?? c.valorFinanciado ?? 0;
+                             csv += `${c.id},"${client}","${prop}",${val},"${c.corretorMatricula || ''}","${c.status}"\n`; 
                           });
                           const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                           const link = document.createElement("a");
@@ -1664,83 +1577,72 @@ export default function App() {
                                 </div>
                                 <div className="text-right">
                                   <div className="flex items-center space-x-2 justify-end mb-1">
-                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${c.statusFinanceiro === 'Atrasado' ? 'bg-red-100 text-red-700 border-red-200' : c.statusFinanceiro === 'Financiado' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}>{c.statusFinanceiro || 'Em Pagamento'}</span>
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${c.statusFinanceiro === 'Atrasado' ? 'bg-red-100 text-red-700 border-red-200' : c.statusFinanceiro === 'Financiado' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}>{c.statusFinanceiro || 'ATIVO'}</span>
                                     {c.status === 'DISTRATADO' ? (
                                       <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-[10px] font-bold border border-gray-200">DISTRATADO</span>
-                                    ) : getContractStatus(c) === 'ATRASO' ? (
-                                      <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200">EM ATRASO</span>
                                     ) : (
                                       <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold border border-green-200">ATIVO</span>
                                     )}
                                   </div>
-                                  <span className="block text-xs font-bold text-gray-700">{c.tipoAmortizacao}</span>
-                                  <span className="block text-[10px] text-gray-400 capitalize">{c.numParcelas} Meses</span>
                                 </div>
                              </div>
 
-                             {isOverdueByMonths(c.installments, 3) && c.status !== 'DISTRATADO' && (
-                               <div className="mb-4 p-3 bg-red-600 text-white rounded-lg flex items-center space-x-2 animate-pulse">
-                                 <AlertCircle size={20} />
-                                 <span className="text-xs font-black uppercase tracking-widest">Entrar em contato com urgência!</span>
+                             {c.status !== 'DISTRATADO' && (
+                               <div className="mt-4 pt-4 border-t border-gray-50 flex space-x-2">
+                                 {confirmingCancelId === c.id ? (
+                                   <div className="flex-1 flex space-x-2">
+                                     <button
+                                        onClick={async () => {
+                                            const loadId = toast.loading('Cancelando contrato...');
+                                            try {
+                                              const res = await fetch(`/api/contracts/${c.id}/cancel`, {
+                                                  method: 'POST',
+                                                  headers: {'Content-Type': 'application/json'},
+                                              });
+                                              toast.dismiss(loadId);
+                                              if (res.ok) {
+                                                 toast.success('Distrato concluído.');
+                                                 setConfirmingCancelId(null);
+                                                 loadApplicationData();
+                                              } else {
+                                                 toast.error('Ocorreu um erro no distrato.');
+                                              }
+                                            } catch(e) {
+                                              toast.dismiss(loadId);
+                                              toast.error('Erro de conexão ao cancelar contrato.');
+                                            }
+                                        }}
+                                        className="flex-1 bg-red-600 text-white hover:bg-red-700 font-bold uppercase tracking-widest text-[10px] py-2 rounded transition-all animate-pulse"
+                                     >
+                                       SIM, DISTRATAR!
+                                     </button>
+                                     <button
+                                        onClick={() => setConfirmingCancelId(null)}
+                                        className="px-3 bg-gray-200 text-gray-700 hover:bg-gray-300 font-bold uppercase tracking-widest text-[10px] py-2 rounded transition-all"
+                                     >
+                                       NÃO
+                                     </button>
+                                   </div>
+                                 ) : (
+                                   <button
+                                      onClick={() => setConfirmingCancelId(c.id)}
+                                      className="flex-1 bg-gray-50 text-gray-600 hover:text-white hover:bg-gray-600 border border-gray-200 font-bold uppercase tracking-widest text-[10px] py-2 rounded transition-all"
+                                   >
+                                     CANCELAR CONTRATO (DISTRATO)
+                                   </button>
+                                 )}
                                </div>
                              )}
 
                              {c.status === 'DISTRATADO' && c.distrato && (
-                               <div className="mb-4 p-3 bg-gray-100 border border-gray-200 rounded-lg">
+                               <div className="mb-4 mt-4 p-3 bg-gray-100 border border-gray-200 rounded-lg">
                                   <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Resumo do Distrato</p>
-                                  <div className="flex justify-between items-center text-xs">
-                                     <span className="text-gray-600">Valor a Devolver:</span>
-                                     <span className="font-bold text-red-600">R$ {c.distrato.valorReembolso.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                  </div>
                                   <div className="flex justify-between items-center text-xs mt-1">
                                      <span className="text-gray-600">Data Cancelamento:</span>
                                      <span className="font-bold">{c.distrato.data}</span>
                                   </div>
-                                  <div className="mt-2 pt-2 border-t border-gray-200">
-                                     <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Cronograma de Reembolso</p>
-                                     <div className="space-y-1">
-                                        {c.distrato.cronogramaDevolucao.map((rd: any) => (
-                                          <div key={rd.parcela} className="flex justify-between text-[10px]">
-                                            <span className="text-gray-500">Parc. {rd.parcela} ({rd.vencimento})</span>
-                                            <span className="font-bold text-gray-700">R$ {rd.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                          </div>
-                                        ))}
-                                     </div>
-                                  </div>
                                </div>
                              )}
-                             <div className="bg-gray-50 p-3 rounded-md border border-gray-200">
-                                <div className="grid grid-cols-4 gap-2 text-[10px] font-bold text-gray-400 mb-2 px-2 uppercase tracking-tighter">
-                                    <span>Nº</span>
-                                    <span>Vencimento</span>
-                                    <span>Valor Tot.</span>
-                                    <span>Saldo</span>
-                                </div>
-                                <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
-                                    {c.installments.map((p: any) => (
-                                        <div key={p.numero} className="grid grid-cols-4 gap-2 text-[11px] py-1 px-2 hover:bg-white rounded transition-colors group items-center">
-                                            <span className="font-bold text-gray-400">{String(p.numero).padStart(3, '0')}</span>
-                                            <span className="text-gray-600">{p.vencimento}</span>
-                                            <span className="font-bold text-blue-600">
-                                              R$ {(p.valorTotal ?? 0).toLocaleString()}
-                                              {p.pago && <CheckCircle2 size={12} className="inline ml-1 text-green-500" />}
-                                            </span>
-                                            <div className="flex justify-between items-center">
-                                              <span className="text-gray-400">R$ {(p.saldoDevedor ?? 0).toLocaleString()}</span>
-                                              {!p.pago && (
-                                                <button 
-                                                  onClick={() => handlePayInstallment(c.id, p.numero)}
-                                                  className="opacity-0 group-hover:opacity-100 bg-green-500 text-white p-0.5 rounded-full transition-opacity"
-                                                  title="Marcar como Pago"
-                                                >
-                                                  <Plus size={10} />
-                                                </button>
-                                              )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                             </div>
                            </div>
                         ))}
                      </div>
@@ -1879,7 +1781,14 @@ export default function App() {
                             </div>
                             <div className="text-right">
                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Valor a Receber</p>
-                               <p className="font-black text-xl text-green-600">R$ {(com.valor_personalizado || com.valor_calculado || 0).toLocaleString()}</p>
+                               <p className="font-black text-xl text-green-600">R$ {(com.valor_personalizado || com.valor_calculado || com.valor_comissao || 0).toLocaleString()}</p>
+                               <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[9px] font-bold border uppercase tracking-wider ${
+                                 com.status === 'PAGO' 
+                                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                   : 'bg-amber-50 text-amber-700 border-amber-200'
+                               }`}>
+                                 {com.status || 'PENDENTE'}
+                               </span>
                             </div>
                          </div>
                        );
@@ -1900,256 +1809,14 @@ export default function App() {
               </motion.div>
             )}
 
-            {view === 'admin-settings' && (
-              <motion.div
-                key="admin-settings"
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="space-y-6 max-w-4xl mx-auto"
-              >
-                <div className="bg-white p-8 rounded-lg shadow-sm border border-gray-100">
-                  <div className="flex items-center space-x-3 mb-6">
-                    <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
-                      <TrendingDown size={24} />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-gray-800">Atualização de Juros em Massa</h2>
-                      <p className="text-sm text-gray-500">Configure a nova taxa para todos os contratos ativos na Tabela PRICE.</p>
-                    </div>
-                  </div>
 
-                  <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg mb-8 flex items-start space-x-3">
-                    <AlertCircle className="text-amber-600 mt-0.5" size={20} />
-                    <div className="text-sm text-amber-800">
-                      <p className="font-bold">Aviso Crítico:</p>
-                      <p>Esta ação é irreversível e afetará <strong>todos</strong> os contratos ativos que utilizam amortização PRICE. Apenas parcelas pendentes serão recalculadas com base no saldo devedor atual.</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-end">
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">Nova Taxa de Juros Global (% AM)</label>
-                      <div className="relative">
-                        <input 
-                          type="number" 
-                          step="0.01"
-                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none transition-all text-lg font-bold"
-                          placeholder="0.00"
-                          value={massUpdateTaxa}
-                          onChange={e => setMassUpdateTaxa(Number(e.target.value))}
-                        />
-                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">%</span>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => setShowUpdateModal(true)}
-                      className="bg-blue-700 hover:bg-blue-800 text-white font-bold py-4 rounded-lg transition-all shadow-lg shadow-blue-100 uppercase tracking-widest text-xs"
-                    >
-                      Aplicar Atualização Global (PRICE)
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
-                  <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
-                    <h3 className="font-bold text-gray-700 text-xs uppercase tracking-widest">Histórico de Alterações Globais</h3>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-gray-50 text-gray-500 border-b">
-                        <tr>
-                          <th className="px-6 py-3 font-semibold">Data/Hora</th>
-                          <th className="px-6 py-3 font-semibold">Admin</th>
-                          <th className="px-6 py-3 font-semibold">Taxa Antiga</th>
-                          <th className="px-6 py-3 font-semibold">Nova Taxa</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {data.updateLogs && data.updateLogs.length === 0 ? (
-                          <tr>
-                            <td colSpan={4} className="px-6 py-8 text-center text-gray-400 italic">Nenhum registro encontrado</td>
-                          </tr>
-                        ) : (
-                          [...data.updateLogs].reverse().map((log: any) => (
-                            <tr key={log.id} className="hover:bg-gray-50">
-                              <td className="px-6 py-4">{new Date(log.data).toLocaleString('pt-BR')}</td>
-                              <td className="px-6 py-4 font-medium">{log.admin}</td>
-                              <td className="px-6 py-4">{log.taxaAntiga}%</td>
-                              <td className="px-6 py-4 text-blue-600 font-bold">{log.taxaNova}%</td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </motion.div>
-            )}
 
 
           </AnimatePresence>
 
-          {/* Double Confirmation Modal */}
-          <AnimatePresence>
-            {showUpdateModal && (
-              <>
-                <motion.div 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={() => !isUpdating && setShowUpdateModal(false)}
-                  className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4"
-                />
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                  className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-xl shadow-2xl z-[151] overflow-hidden"
-                >
-                  <div className="p-6 text-center">
-                    <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <AlertCircle size={32} />
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-800 mb-2">Confirmação de Segurança</h3>
-                    <p className="text-gray-600 text-sm mb-6">
-                      Você está prestes a atualizar a taxa de juros de <strong>todos</strong> os contratos PRICE ativos para <strong>{massUpdateTaxa}% AM</strong>.
-                      <br /><br />
-                      Tem certeza que deseja prosseguir com esta operação em massa?
-                    </p>
-                    
-                    <div className="space-y-3">
-                      <button 
-                        onClick={handleMassUpdate}
-                        disabled={isUpdating}
-                        className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg flex items-center justify-center transition-all disabled:opacity-50"
-                      >
-                        {isUpdating ? 'PROCESSANDO...' : 'SIM, APLICAR AGORA'}
-                      </button>
-                      <button 
-                        onClick={() => setShowUpdateModal(false)}
-                        disabled={isUpdating}
-                        className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 rounded-lg transition-all"
-                      >
-                        CANCELAR
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
 
-          {/* Distrato Modal */}
-          <AnimatePresence>
-            {showDistratoModal && distratoContract && distratoSummary && (
-              <>
-                <motion.div 
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200]"
-                  onClick={() => !isProcessingDistrato && setShowDistratoModal(false)}
-                />
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                  className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-2xl shadow-2xl z-[201] overflow-hidden"
-                >
-                  <div className="bg-red-600 p-6 text-white text-center">
-                    <AlertCircle size={48} className="mx-auto mb-2" />
-                    <h2 className="text-xl font-bold uppercase">Distrato de Financiamento</h2>
-                    <p className="text-xs opacity-80 uppercase tracking-widest">Procedimento Irreversível</p>
-                  </div>
 
-                  <div className="p-6 space-y-6">
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Já Pago pelo Cliente</p>
-                      <p className="text-2xl font-black text-gray-800">R$ {distratoSummary.totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                    </div>
 
-                    <div className="space-y-4">
-                      <p className="text-xs font-bold text-gray-600 uppercase tracking-tighter">Selecione a Opção de Devolução:</p>
-                      
-                      <button 
-                        onClick={() => setDistratoOption('80')}
-                        className={`w-full p-4 rounded-xl border-2 text-left transition-all ${distratoOption === '80' ? 'border-blue-600 bg-blue-50' : 'border-gray-100 bg-white'}`}
-                      >
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="font-black text-sm uppercase">Opção 1: 80% Parcelado</span>
-                          {distratoOption === '80' && <CheckCircle2 size={16} className="text-blue-600" />}
-                        </div>
-                        <p className="text-xs text-gray-500">Valor total a devolver: <span className="font-bold text-gray-700">R$ {distratoSummary.option80.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span></p>
-                        
-                        {distratoOption === '80' && (
-                          <div className="mt-3 pt-3 border-t border-blue-100">
-                            <label className="text-[10px] font-black text-blue-600 uppercase mb-1 block">Número de Parcelas da Devolução:</label>
-                            <input 
-                              type="number"
-                              className="w-full bg-white border border-blue-200 rounded px-3 py-1 text-sm font-bold text-blue-800 outline-none focus:ring-1 ring-blue-400"
-                              value={distratoInstallments}
-                              onChange={e => setDistratoInstallments(Number(e.target.value))}
-                              min="1" max="60"
-                            />
-                          </div>
-                        )}
-                      </button>
-
-                      <button 
-                        onClick={() => setDistratoOption('50')}
-                        className={`w-full p-4 rounded-xl border-2 text-left transition-all ${distratoOption === '50' ? 'border-blue-600 bg-blue-50' : 'border-gray-100 bg-white'}`}
-                      >
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="font-black text-sm uppercase">Opção 2: 50% à Vista</span>
-                          {distratoOption === '50' && <CheckCircle2 size={16} className="text-blue-600" />}
-                        </div>
-                        <p className="text-xs text-gray-500">Valor total a devolver: <span className="font-bold text-gray-700">R$ {distratoSummary.option50.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span></p>
-                      </button>
-                    </div>
-
-                    <div className="bg-red-50 p-4 rounded-lg flex items-start space-x-3 text-red-800">
-                      <AlertCircle size={20} className="flex-shrink-0" />
-                      <p className="text-[10px] font-medium leading-tight">Ao confirmar, o contrato será cancelado e o cronograma de devolução será gerado automaticamente. Esta ação é definitiva.</p>
-                    </div>
-                  </div>
-
-                  <div className="p-4 bg-gray-50 border-t flex space-x-3">
-                    <button 
-                      onClick={() => setShowDistratoModal(false)}
-                      disabled={isProcessingDistrato}
-                      className="flex-1 py-3 bg-white border rounded-xl font-bold text-gray-500 text-xs uppercase tracking-widest hover:bg-gray-100 disabled:opacity-50"
-                    >
-                      CANCELAR
-                    </button>
-                    <button 
-                      disabled={isProcessingDistrato}
-                      onClick={async () => {
-                        setIsProcessingDistrato(true);
-                        const res = await fetch(`/api/contracts/${distratoContract.id}/cancel`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ 
-                            option: distratoOption, 
-                            numInstallments: distratoInstallments 
-                          })
-                        });
-                        if (res.ok) {
-                          toast.success('Distrato efetuado com sucesso!');
-                          setShowDistratoModal(false);
-                          loadApplicationData();
-                          setSelectedClient(null);
-                        } else {
-                          toast.error('Erro ao processar distrato.');
-                        }
-                        setIsProcessingDistrato(false);
-                      }}
-                      className="flex-1 py-3 bg-red-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-700 shadow-lg shadow-red-100 disabled:opacity-50"
-                    >
-                      {isProcessingDistrato ? 'PROCESSANDO...' : 'CONFIRMAR DISTRATO'}
-                    </button>
-                  </div>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
 
           {/* Property Modal */}
           <AnimatePresence>
@@ -2173,33 +1840,45 @@ export default function App() {
 
                   <form className="p-6 space-y-4" onSubmit={async (e) => {
                     e.preventDefault();
-                    const form = e.target as any;
-                    const formData = new FormData();
-                    formData.append('nome', propertyForm.nome);
-                    formData.append('valor', String(propertyForm.valor));
-                    formData.append('localizacao', propertyForm.localizacao);
-                    formData.append('descricao', propertyForm.descricao);
-                          
-                    if (form.images.files && form.images.files.length > 0) {
-                      for (let i = 0; i < form.images.files.length; i++) {
-                        formData.append('images', form.images.files[i]);
+                    try {
+                      const form = e.target as any;
+                      const formData = new FormData();
+                      formData.append('nome', propertyForm.nome);
+                      formData.append('valor', String(propertyForm.valor));
+                      formData.append('localizacao', propertyForm.localizacao);
+                      formData.append('descricao', propertyForm.descricao);
+                      formData.append('tipo', propertyForm.tipo || 'Lote');
+                            
+                      if (propertyForm.id && propertyForm.images && propertyForm.images.length > 0) {
+                        formData.append('existingImages', JSON.stringify(propertyForm.images));
                       }
-                    }
-                          
-                    const url = propertyForm.id ? `/api/properties/${propertyForm.id}` : '/api/properties';
-                    const method = propertyForm.id ? 'PUT' : 'POST';
-                    const res = await fetch(url, {
-                      method,
-                      body: formData
-                    });
-                    if (res.ok) {
-                      toast.success(propertyForm.id ? 'Imóvel atualizado com sucesso!' : 'Imóvel cadastrado com sucesso!');
-                      setShowPropertyModal(false);
-                      setPropertyForm({ id: null, nome: '', valor: 0, localizacao: '', descricao: '' });
-                      loadApplicationData();
-                    } else {
-                      const err = await res.json();
-                      toast.error(`Erro: ${err.error || 'Erro ao processar'}`);
+
+                      const fileInput = form.querySelector('input[name="images"]') as HTMLInputElement;
+                      if (fileInput && fileInput.files && fileInput.files.length > 0) {
+                        for (let i = 0; i < fileInput.files.length; i++) {
+                          formData.append('images', fileInput.files[i]);
+                        }
+                      }
+                            
+                      const url = propertyForm.id ? `/api/properties/${propertyForm.id}` : '/api/properties';
+                      const method = propertyForm.id ? 'PUT' : 'POST';
+                      const res = await fetch(url, {
+                        method,
+                        body: formData
+                      });
+                      if (res.ok) {
+                        toast.success(propertyForm.id ? 'Imóvel atualizado com sucesso!' : 'Imóvel cadastrado com sucesso!');
+                        setShowPropertyModal(false);
+                        setPropertyForm({ id: null, nome: '', valor: 0, localizacao: '', descricao: '', images: [], tipo: 'Lote' });
+                        loadApplicationData();
+                      } else {
+                        let errMsg = 'Erro ao processar';
+                        try { const err = await res.json(); errMsg = err.error || errMsg; } catch(e) {}
+                        toast.error(`Erro: ${errMsg}`);
+                      }
+                    } catch(err: any) {
+                      console.error('[Save Property Error]', err);
+                      toast.error(`Problema de conexão com o servidor ao salvar imóvel: ${err?.message || err}`);
                     }
                   }}>
                     <div>
@@ -2211,6 +1890,22 @@ export default function App() {
                         value={propertyForm.nome}
                         onChange={e => setPropertyForm({...propertyForm, nome: e.target.value})}
                       />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase mb-1">Tipo do Imóvel</label>
+                      <select 
+                        required
+                        className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 ring-blue-500 bg-white font-sans text-sm font-semibold"
+                        value={propertyForm.tipo}
+                        onChange={e => setPropertyForm({...propertyForm, tipo: e.target.value})}
+                      >
+                        <option value="Lote">Lote</option>
+                        <option value="Casa">Casa</option>
+                        <option value="Apartamento">Apartamento</option>
+                        <option value="Programa Minha Casa Minha Vida (MCMV)">Programa Minha Casa Minha Vida (MCMV)</option>
+                        <option value="Imóvel de Terceiros">Imóvel de Terceiros</option>
+                        <option value="Aluguel">Aluguel</option>
+                      </select>
                     </div>
                     <div>
                       <label className="block text-[10px] font-black text-gray-500 uppercase mb-1">Valor Sugerido para Venda</label>
@@ -2264,6 +1959,59 @@ export default function App() {
                         {propertyForm.id ? 'SALVAR ALTERAÇÕES' : 'CADASTRAR'}
                       </button>
                     </div>
+
+                    {propertyForm.id && (
+                      <div className="border-t border-gray-100 mt-4 pt-4">
+                        {isConfirmingDeleteProperty ? (
+                          <div className="bg-red-50 p-3 rounded-xl space-y-2 border border-red-100 flex flex-col">
+                            <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider text-center">Tem certeza que deseja excluir permanentemente este imóvel?</p>
+                            <div className="flex space-x-2">
+                              <button
+                                type="button"
+                                onClick={() => setIsConfirmingDeleteProperty(false)}
+                                className="flex-1 py-1.5 bg-gray-200 text-gray-700 text-[10px] font-bold uppercase rounded-lg hover:bg-gray-300 transition-all border border-gray-300"
+                              >
+                                Não, Cancelar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    const loadId = toast.loading('Excluindo imóvel...');
+                                    const res = await fetch(`/api/properties/${propertyForm.id}`, { method: 'DELETE' });
+                                    toast.dismiss(loadId);
+                                    if (res.ok) {
+                                      toast.success('Imóvel excluído com sucesso!');
+                                      setShowPropertyModal(false);
+                                      setIsConfirmingDeleteProperty(false);
+                                      setPropertyForm({ id: null, nome: '', valor: 0, localizacao: '', descricao: '', images: [], tipo: 'Lote' });
+                                      await loadApplicationData();
+                                    } else {
+                                      const body = await res.json();
+                                      toast.error(`Erro ao excluir imóvel: ${body.error || 'Erro desconhecido'}`);
+                                    }
+                                  } catch (err) {
+                                    toast.error('Erro de conexão ao excluir imóvel.');
+                                  }
+                                }}
+                                className="flex-1 py-1.5 bg-red-600 text-white text-[10px] font-bold uppercase rounded-lg hover:bg-red-700 transition-all shadow-md animate-pulse"
+                              >
+                                Sim, Excluir!
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setIsConfirmingDeleteProperty(true)}
+                            className="w-full py-2.5 bg-red-50 hover:bg-red-100 text-red-600 font-bold border border-red-200 rounded-xl text-xs uppercase transition-all flex items-center justify-center space-x-1"
+                          >
+                            <Trash2 size={14} className="mr-1" />
+                            <span>EXCLUIR IMÓVEL</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </form>
                 </motion.div>
               </>
@@ -2347,39 +2095,12 @@ export default function App() {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {data.contracts.filter((c: any) => c.clientId === selectedClient.id).map((c: any) => {
                               const property = data.properties.find((p: any) => p.id === c.propertyId);
-                              const paidInstallments = c.installments?.filter((i: any) => i.pago).length || 0;
-                              const totalInstallments = c.numParcelas || c.installments?.length || 1;
-                              const progressPercent = Math.round((paidInstallments / totalInstallments) * 100);
                               
                               return (
                                 <div key={c.id} className="bg-gray-50 p-4 rounded-lg border border-gray-100">
                                   <div className="flex justify-between items-start mb-2">
                                     <h4 className="font-bold text-blue-800">{property?.nome || 'Imóvel não encontrado'}</h4>
                                     <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded border border-green-200">ATIVO</span>
-                                  </div>
-                                  <div className="space-y-1 text-xs">
-                                    <p className="flex justify-between">
-                                      <span className="text-gray-500">Valor Financiado:</span>
-                                      <span className="font-mono font-bold">R$ {(c.valorFinanciado || 0).toLocaleString()}</span>
-                                    </p>
-                                    <p className="flex justify-between">
-                                      <span className="text-gray-500">Amortização:</span>
-                                      <span className="font-bold">{c.tipoAmortizacao}</span>
-                                    </p>
-                                    <p className="flex justify-between">
-                                      <span className="text-gray-500">Prazo:</span>
-                                      <span className="font-bold">{c.numParcelas} meses</span>
-                                    </p>
-                                  </div>
-                                  
-                                  <div className="mt-4 pt-3 border-t border-gray-200">
-                                    <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Status Financeiro</p>
-                                    <div className="flex items-center space-x-2">
-                                      <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                        <div className="h-full bg-blue-600 rounded-full" style={{ width: `${progressPercent}%` }} />
-                                      </div>
-                                      <span className="text-[10px] font-bold text-gray-600">{progressPercent}% PAGO</span>
-                                    </div>
                                   </div>
 
                                   {c.status !== 'DISTRATADO' && (
@@ -2458,6 +2179,80 @@ export default function App() {
                     )}
                   </div>
                 </motion.div>
+              </>
+            )}
+
+            {showDistratoModal && distratoContract && (
+              <>
+                <div key="distrato-overlay" className="fixed inset-0 bg-black/50 z-[100] backdrop-blur-sm transition-all animate-fade-in" />
+                <div className="fixed inset-0 flex items-center justify-center z-[101] p-4">
+                  <motion.div 
+                    key="distrato-modal"
+                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                    className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 font-sans"
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <h3 className="text-base font-bold text-gray-800 uppercase tracking-tight">Simulação de Distrato</h3>
+                      <button onClick={() => setShowDistratoModal(false)} className="text-gray-400 hover:text-gray-600 font-bold text-lg">×</button>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-2">Resumo da Simulação</p>
+                      
+                      <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex flex-col space-y-2 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Valor Total Pago:</span>
+                          <span className="font-bold text-gray-800">R$ {distratoSummary?.totalPaid?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Restituição (Multa 50% - Lei do Distrato):</span>
+                          <span className="font-bold text-red-600">R$ {distratoSummary?.option50?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Restituição (Multa 20%):</span>
+                          <span className="font-bold text-green-600">R$ {distratoSummary?.option80?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 flex space-x-3">
+                      <button 
+                        onClick={() => setShowDistratoModal(false)}
+                        className="flex-1 py-2 px-4 border rounded-lg text-[10px] font-bold uppercase tracking-widest text-gray-600 hover:bg-gray-50 transition-colors"
+                      >
+                        Voltar
+                      </button>
+                      <button 
+                        onClick={async () => {
+                          const loadId = toast.loading('Processando distrato...');
+                          try {
+                            const res = await fetch(`/api/contracts/${distratoContract.id}/cancel`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                            });
+                            toast.dismiss(loadId);
+                            if (res.ok) {
+                              toast.success('Distrato concluído com sucesso!');
+                              setShowDistratoModal(false);
+                              setSelectedClient(null);
+                              loadApplicationData();
+                            } else {
+                              toast.error('Erro ao efetuar distrato.');
+                            }
+                          } catch (e) {
+                            toast.dismiss(loadId);
+                            toast.error('Erro de conexão ao processar.');
+                          }
+                        }}
+                        className="flex-1 py-2 px-4 bg-red-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-700 transition-colors shadow-md shadow-red-100"
+                      >
+                        Confirmar Distrato
+                      </button>
+                    </div>
+                  </motion.div>
+                </div>
               </>
             )}
           </AnimatePresence>

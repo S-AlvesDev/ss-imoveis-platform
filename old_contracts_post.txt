@@ -1,0 +1,98 @@
+  app.post('/api/contracts', upload.array('files', 5), async (req, res) => {
+    console.log('[API] Registrando contrato:', req.body);
+    const { clientId, propertyId, valorImovel, valorEntrada, taxaJuros, numParcelas, tipoAmortizacao, dataInicio, corretorMatricula, tipoContrato } = req.body;
+    
+    const files = req.files as Express.Multer.File[];
+    const pdfUrls: string[] = [];
+    if (files && files.length > 0) {
+       const dir = path.join(process.cwd(), 'public', 'media');
+       if (!require('fs').existsSync(dir)) require('fs').mkdirSync(dir, { recursive: true });
+       for (const file of files) {
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9) + '.pdf';
+          const outPath = path.join(dir, uniqueSuffix);
+          require('fs').writeFileSync(outPath, file.buffer);
+          pdfUrls.push(`/media/${uniqueSuffix}`);
+       }
+    }
+
+    if (!clientId || !propertyId || !corretorMatricula) {
+      return res.status(400).json({ error: 'Cliente, Imóvel e Corretor são obrigatórios' });
+    }
+
+    const financedAmount = Number(valorImovel) - Number(valorEntrada);
+    
+    let installments = [];
+    try {
+      if (tipoAmortizacao === AmortizationType.SAC) {
+        installments = calculateSAC(financedAmount, Number(taxaJuros), Number(numParcelas), dataInicio);
+      } else {
+        installments = calculatePrice(financedAmount, Number(taxaJuros), Number(numParcelas), dataInicio);
+      }
+    } catch (calcErr: any) {
+      console.error('[Amortization Error]', calcErr);
+      return res.status(400).json({ error: 'Erro ao calcular parcelas: ' + calcErr.message });
+    }
+
+    const statusFinanceiro = 'Em Pagamento';
+    const finalTipoContrato = tipoContrato || 'VENDA';
+
+    const insertData: any = {
+      client_id: Number(clientId),
+      property_id: Number(propertyId),
+      valor_imovel: Number(valorImovel),
+      valor_entrada: Number(valorEntrada),
+      valor_financiado: financedAmount,
+      taxa_juros: Number(taxaJuros),
+      num_parcelas: Number(numParcelas),
+      tipo_amortizacao: tipoAmortizacao,
+      data_inicio: dataInicio,
+      installments,
+      status: 'ATIVO',
+      data_contrato: new Date().toISOString(),
+      tipo_contrato: finalTipoContrato,
+      status_financeiro: statusFinanceiro
+    };
+
+    if (pdfUrls.length > 0) {
+       insertData.distrato = { pdfs: pdfUrls }; // Temporary use of 'distrato' column to skip db schema changes
+    }
+
+    const { data: newContract, error } = await supabaseServer.from('contracts').insert(insertData).select().maybeSingle();
+
+    if (error) {
+      console.error('[Supabase Contract Insert Error] Full Error:', JSON.stringify(error, null, 2));
+      return res.status(500).json({ 
+        error: 'Erro no banco de dados ao criar contrato: ' + error.message, 
+        details: error.details,
+      });
+    }
+    
+    if (!newContract) {
+      return res.status(500).json({ error: 'Falha ao criar contrato: Nenhum dado retornado do banco.' });
+    }
+
+    // Gerar Comissão Automatizada
+    let regraAplicada = 'Manual';
+    let valorComissao = 0;
+
+    if (finalTipoContrato === 'Lote') {
+        regraAplicada = 'Lote (Valor Fixo)';
+        valorComissao = 250.00;
+    } else if (finalTipoContrato === 'Aluguel') {
+        regraAplicada = 'Aluguel (15%)';
+        valorComissao = Number(valorImovel) * 0.15;
+    } else if (finalTipoContrato === 'Minha Casa Minha Vida') {
+        regraAplicada = 'MCMV (0,5%)';
+        valorComissao = Number(valorImovel) * 0.005;
+    } else if (finalTipoContrato === 'De Terceiros') {
+        regraAplicada = 'Imóvel de Terceiros (Definir Valor)';
+        valorComissao = 0;
+    }
+
+    const { error: comissaoError } = await supabaseServer.from('comissoes').insert({
+        contrato_id: newContract.id,
+        cliente_id: Number(clientId),
+        imovel_id: Number(propertyId),
+        corretor_matricula: corretorMatricula,
+        regra_aplicada: regraAplicada,
+        valor_comissao: valorComissao,

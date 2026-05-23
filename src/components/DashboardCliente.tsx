@@ -10,7 +10,8 @@ import {
   ChevronRight,
   User,
   Phone,
-  MessageCircle
+  MessageCircle,
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
@@ -26,11 +27,39 @@ interface DashboardClienteProps {
 
 const PropertyGallery = ({ images }: { images?: string[] }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [hasError, setHasError] = useState(false);
 
-  if (!images || images.length === 0) {
+  React.useEffect(() => {
+    setHasError(false);
+  }, [images, currentIndex]);
+
+  let imageList: string[] = [];
+  if (images) {
+    if (Array.isArray(images)) {
+      imageList = images;
+    } else if (typeof images === 'string') {
+      try {
+        const parsed = JSON.parse(images);
+        if (Array.isArray(parsed)) {
+          imageList = parsed;
+        } else if (parsed) {
+          imageList = [parsed];
+        }
+      } catch (e) {
+        const str = (images as string).trim();
+        if (str.startsWith('{') && str.endsWith('}')) {
+          imageList = str.slice(1, -1).split(',').map(s => s.trim().replace(/^['"]|['"]$/g, ''));
+        } else if (str) {
+          imageList = [str];
+        }
+      }
+    }
+  }
+
+  if (imageList.length === 0 || hasError) {
     return (
       <div className="w-full h-48 bg-blue-50 flex flex-col items-center justify-center text-blue-300 rounded-2xl">
-        <Home size={40} className="mb-2" />
+        <Home size={32} className="mb-2" />
         <span className="text-xs font-bold uppercase tracking-widest">Sem Imagens</span>
       </div>
     );
@@ -38,47 +67,53 @@ const PropertyGallery = ({ images }: { images?: string[] }) => {
 
   const nextImage = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setCurrentIndex((prev) => (prev + 1) % images.length);
+    setCurrentIndex((prev) => (prev + 1) % imageList.length);
   };
 
   const prevImage = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setCurrentIndex((prev) => (prev - 1 + images.length) % images.length);
+    setCurrentIndex((prev) => (prev - 1 + imageList.length) % imageList.length);
   };
 
   return (
-    <div className="relative w-full h-64 bg-gray-200 overflow-hidden rounded-2xl group">
-      <img src={images[currentIndex]} alt="imóvel" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+    <div className="relative w-full h-64 bg-slate-100/50 overflow-hidden rounded-2xl group flex items-center justify-center border border-gray-100">
+      <img 
+        src={imageList[currentIndex]} 
+        id="property-gallery-client-image"
+        alt="imóvel" 
+        onError={() => setHasError(true)}
+        className="max-w-full max-h-full object-contain transition-transform duration-500" 
+      />
       
-      {images.length > 1 && (
+      {imageList.length > 1 && (
         <>
-          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-300 pointer-events-none" />
+          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-300 pointer-events-none" />
           <button 
             type="button"
             onClick={prevImage}
-            className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 text-white rounded-full p-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-black/70 transition-all z-10"
+            className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 text-white rounded-full p-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-black/80 transition-all z-10 shadow-md"
           >
-            <ChevronLeft size={20} />
+            <ChevronLeft size={16} />
           </button>
           <button 
             type="button"
             onClick={nextImage}
-            className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/40 text-white rounded-full p-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-black/70 transition-all z-10"
+            className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 text-white rounded-full p-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-black/80 transition-all z-10 shadow-md"
           >
-            <ChevronRight size={20} />
+            <ChevronRight size={16} />
           </button>
           
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex space-x-1.5 z-10">
-            {images.map((_, idx) => (
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex space-x-1.5 z-10 bg-black/30 px-2.5 py-1 rounded-full backdrop-blur-sm opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
+            {imageList.map((_, idx) => (
               <div 
                 key={idx} 
-                className={`w-1.5 h-1.5 rounded-full transition-all ${idx === currentIndex ? 'bg-white scale-125' : 'bg-white/50'}`} 
+                className={`w-1.5 h-1.5 rounded-full transition-all ${idx === currentIndex ? 'bg-white scale-125' : 'bg-white/40'}`} 
               />
             ))}
           </div>
           
-          <div className="absolute top-3 right-3 bg-black/50 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-sm backdrop-blur-sm z-10">
-            {currentIndex + 1} / {images.length}
+          <div className="absolute top-3 right-3 bg-black/60 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-sm backdrop-blur-sm z-10">
+            {currentIndex + 1} / {imageList.length}
           </div>
         </>
       )}
@@ -187,13 +222,37 @@ export default function DashboardCliente({ onLogout, clienteNome = "Cliente SS",
                      "{imovelData.descricao}"
                    </div>
                  )}
-
-                 <div className="flex justify-between items-center py-3 border-t border-gray-50">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Valor do Imóvel</span>
-                    <span className="text-lg font-black text-blue-700">R$ {(contratoData.valorImovel || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                 </div>
                </div>
             </div>
+
+            {/* Documentos Anexados */}
+            {contratoData?.distrato?.pdfs && contratoData.distrato.pdfs.length > 0 && (
+               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-3">
+                 <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center border-b pb-2">
+                   <FileText size={14} className="mr-1.5 text-blue-500" />
+                   SEUS CONTRATOS E ANEXOS
+                 </h4>
+                 <div className="flex flex-col space-y-2">
+                   {contratoData.distrato.pdfs.map((pdf: string, idx: number) => (
+                     <a 
+                       key={idx} 
+                       href={pdf} 
+                       target="_blank" 
+                       rel="noopener noreferrer" 
+                       className="flex items-center justify-between p-3 bg-gray-50 hover:bg-blue-50 transition-colors rounded-xl border border-gray-100 group"
+                     >
+                       <div className="flex items-center space-x-3 text-gray-700 group-hover:text-blue-700">
+                         <div className="p-2 bg-white rounded-lg text-red-500 shadow-sm">
+                            <FileText size={18} />
+                         </div>
+                         <span className="text-sm font-bold truncate">Contrato PDF Anexado {idx + 1}</span>
+                       </div>
+                       <Download size={16} className="text-gray-400 group-hover:text-blue-600" />
+                     </a>
+                   ))}
+                 </div>
+               </div>
+            )}
 
             {/* Corretor Info */}
             {corretor && (
@@ -266,8 +325,7 @@ export default function DashboardCliente({ onLogout, clienteNome = "Cliente SS",
                   )}
                   <div className="flex-1">
                     <h4 className="font-bold text-gray-800 text-sm leading-tight mb-1">{p.nome}</h4>
-                    <p className="text-[10px] text-gray-500 mb-2">{p.localizacao}</p>
-                    <p className="text-blue-600 font-black text-sm">R$ {p.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                    <p className="text-[10px] text-gray-500">{p.localizacao}</p>
                   </div>
                 </div>
               </motion.div>
@@ -319,11 +377,7 @@ export default function DashboardCliente({ onLogout, clienteNome = "Cliente SS",
                   </div>
 
                   {!showInterestForm ? (
-                    <div className="flex justify-between items-end border-t border-gray-100 pt-4">
-                      <div>
-                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Valor de Venda</p>
-                         <p className="text-2xl font-black text-blue-700">R$ {selectedProperty.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                      </div>
+                    <div className="flex justify-end items-end pt-4">
                       <button 
                         onClick={() => setShowInterestForm(true)}
                         className="bg-[#1D2D3D] text-white px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95"

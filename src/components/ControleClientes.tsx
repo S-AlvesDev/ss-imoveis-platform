@@ -9,6 +9,7 @@ export default function ControleClientes() {
   // Filtros
   const [searchName, setSearchName] = useState('');
   const [filterQuadra, setFilterQuadra] = useState('');
+  const [filterSituacao, setFilterSituacao] = useState('');
 
   // Modais
   const [showModal, setShowModal] = useState(false);
@@ -147,10 +148,20 @@ export default function ControleClientes() {
     'Conformidade': 'bg-teal-100 text-teal-800',
     'Entregue': 'bg-blue-100 text-blue-800',
     'Cartorio': 'bg-purple-100 text-purple-800',
+    'Cartório': 'bg-purple-100 text-purple-800',
     'Condicionado': 'bg-orange-100 text-orange-800',
     'Reprovado': 'bg-red-100 text-red-800',
     'Documentação': 'bg-slate-100 text-slate-800',
+    'Documentacao': 'bg-slate-100 text-slate-800',
     'Analise': 'bg-yellow-100 text-yellow-800',
+    'Análise': 'bg-yellow-100 text-yellow-800',
+  };
+
+  const normalizeStr = (str: string) => {
+    return (str || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
   };
 
   const allQuadras = Array.from(new Set(data.map(d => d.quadra).filter(Boolean))).sort();
@@ -158,14 +169,15 @@ export default function ControleClientes() {
   const filteredData = data.filter(item => {
     const matchesName = !searchName || (item.nome_cliente || '').toLowerCase().includes(searchName.toLowerCase());
     const matchesQuadra = !filterQuadra || item.quadra === filterQuadra;
-    return matchesName && matchesQuadra;
+    const matchesSituacao = !filterSituacao || normalizeStr(item.situacao) === normalizeStr(filterSituacao);
+    return matchesName && matchesQuadra && matchesSituacao;
   });
 
   return (
     <div className="p-6 md:p-8 animate-fade-in font-sans">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-800 mb-2">Controle de Clientes</h1>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-800 mb-2">Controle da Supervisão</h1>
           <p className="text-gray-500">Acompanhamento manual de processos de aprovação e entregas.</p>
         </div>
         <button 
@@ -189,18 +201,38 @@ export default function ControleClientes() {
             />
           </div>
           
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <Filter size={18} className="text-gray-400" />
-            <select
-              value={filterQuadra}
-              onChange={(e) => setFilterQuadra(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-gray-700 bg-white"
-            >
-              <option value="">Todas as Quadras</option>
-              {allQuadras.map(q => (
-                <option key={String(q)} value={String(q)}>Quadra {String(q)}</option>
-              ))}
-            </select>
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            <div className="flex items-center gap-2">
+              <Filter size={18} className="text-gray-400" />
+              <select
+                value={filterQuadra}
+                onChange={(e) => setFilterQuadra(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-gray-700 bg-white text-sm"
+              >
+                <option value="">Todas as Quadras</option>
+                {allQuadras.map(q => (
+                  <option key={String(q)} value={String(q)}>Quadra {String(q)}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <select
+                value={filterSituacao}
+                onChange={(e) => setFilterSituacao(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-gray-700 bg-white text-sm"
+              >
+                <option value="">Todas as Situações</option>
+                <option value="Analise">Análise</option>
+                <option value="Aprovado">Aprovado</option>
+                <option value="Conformidade">Conformidade</option>
+                <option value="Condicionado">Condicionado</option>
+                <option value="Documentação">Documentação</option>
+                <option value="Cartorio">Cartório</option>
+                <option value="Entregue">Entregue</option>
+                <option value="Reprovado">Reprovado</option>
+              </select>
+            </div>
           </div>
         </div>
 

@@ -39,19 +39,13 @@ CREATE TABLE IF NOT EXISTS public.contracts (
     id SERIAL PRIMARY KEY,
     client_id INTEGER REFERENCES public.clients(id) ON DELETE CASCADE,
     property_id INTEGER REFERENCES public.properties(id) ON DELETE CASCADE,
+    corretor_matricula TEXT,
     valor_imovel NUMERIC(10, 2) NOT NULL,
-    valor_entrada NUMERIC(10, 2) NOT NULL,
-    valor_financiado NUMERIC(10, 2) NOT NULL,
-    taxa_juros NUMERIC(5, 2) NOT NULL,
-    num_parcelas INTEGER NOT NULL,
-    tipo_amortizacao TEXT NOT NULL,
-    data_inicio DATE NOT NULL,
-    status TEXT DEFAULT 'ATIVO',
-    data_contrato TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
-    distrato JSONB,
-    installments JSONB NOT NULL,
     tipo_contrato TEXT DEFAULT 'VENDA',
-    status_financeiro TEXT DEFAULT 'Em Pagamento'
+    status TEXT DEFAULT 'ATIVO',
+    status_financeiro TEXT DEFAULT 'Em Pagamento',
+    distrato JSONB,
+    data_contrato TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
 -- 5. Tabela de Comissoes
@@ -118,4 +112,19 @@ ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS categoria TEXT DEFAULT 'Ou
 ALTER TABLE public.comissoes ADD COLUMN IF NOT EXISTS valor_calculado NUMERIC(10, 2) NULL;
 ALTER TABLE public.comissoes ADD COLUMN IF NOT EXISTS valor_personalizado NUMERIC(10, 2) NULL;
 ALTER TABLE public.properties ADD COLUMN IF NOT EXISTS images JSONB DEFAULT '[]'::jsonb;
+
+-- Dicas para limpeza da tabela contacts no Supabase Live (Execute isso no SQL Editor do Supabase)
+-- Se você quiser limpar as colunas que não vamos mais usar em contratos, rode:
+/*
+ALTER TABLE public.contracts 
+  DROP COLUMN IF EXISTS valor_entrada,
+  DROP COLUMN IF EXISTS valor_financiado,
+  DROP COLUMN IF EXISTS taxa_juros,
+  DROP COLUMN IF EXISTS num_parcelas,
+  DROP COLUMN IF EXISTS tipo_amortizacao,
+  DROP COLUMN IF EXISTS data_inicio,
+  DROP COLUMN IF EXISTS installments;
+
+ALTER TABLE public.contracts ADD COLUMN IF NOT EXISTS corretor_matricula TEXT;
+*/
 
