@@ -40,7 +40,8 @@ import {
   Trash2,
   UserCheck,
   Eye,
-  EyeOff
+  EyeOff,
+  ArrowDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
@@ -762,9 +763,7 @@ export default function App() {
             {/* Scroll Indicator */}
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 animate-bounce hidden md:flex flex-col items-center opacity-70">
               <span className="text-xs tracking-widest uppercase mb-2 text-blue-200">Saiba Mais</span>
-              <div className="w-6 h-10 border-2 border-blue-200 rounded-full flex justify-center p-1">
-                 <div className="w-1.5 h-3 bg-blue-200 rounded-full animate-pulse" />
-              </div>
+              <ArrowDown className="w-6 h-6 text-blue-200" />
             </div>
           </section>
 
