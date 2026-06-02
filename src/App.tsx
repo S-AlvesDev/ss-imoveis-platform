@@ -245,9 +245,15 @@ export default function App() {
   useEffect(() => {
     if (showPropertyModal) {
       fetch('/api/imagens-disponiveis')
-        .then(res => res.json())
+        .then(res => {
+          if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+          return res.json();
+        })
         .then(data => setAvailableImages(data || []))
-        .catch(err => console.error("Error fetching available images:", err));
+        .catch(err => {
+          console.error("Error fetching available images:", err);
+          setAvailableImages([]);
+        });
         
       if (propertyForm.images && propertyForm.images.length > 0) {
         setSelectedImageStr(propertyForm.images[0]);

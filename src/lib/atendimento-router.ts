@@ -136,69 +136,148 @@ const handleCustomerMessage = (conversationId: string) => {
     aiDebounceMap.set(conversationId, timer);
 };
 
+// --- Webhook Logs Telemetry ---
+export interface WebhookLog {
+    timestamp: string;
+    event: string;
+    sender: string;
+    content: string;
+    direction: string;
+    success: boolean;
+    error?: string;
+    payload?: any;
+}
+
+export const webhookLogs: WebhookLog[] = [];
+
+const addWebhookLog = (log: WebhookLog) => {
+    webhookLogs.unshift(log);
+    if (webhookLogs.length > 50) {
+        webhookLogs.pop();
+    }
+    if (ioInstance) {
+        ioInstance.emit('atendimento_webhook_log_new', log);
+    }
+};
+
+// --- Webhook Telemetry Routes ---
+router.get('/webhook-logs', (req, res) => {
+    res.json(webhookLogs);
+});
+
+router.post('/webhook-logs/clear', (req, res) => {
+    webhookLogs.length = 0;
+    res.json({ success: true });
+});
+
+router.get('/status-env', (req, res) => {
+    res.json({
+        EVOLUTION_API_URL: process.env.EVOLUTION_API_URL || '',
+        EVOLUTION_API_KEY: process.env.EVOLUTION_API_KEY ? 'Configurado (apikey)' : 'Ausente/Não configurado',
+        EVOLUTION_INSTANCE: process.env.EVOLUTION_INSTANCE || '',
+        GEMINI_API_KEY: process.env.GEMINI_API_KEY ? 'Configurado' : 'Ausente/Não configurado',
+        serverTime: new Date().toISOString()
+    });
+});
+
 // --- Webhook (Suporta MOCK e EVOLUTION API) ---
 router.post('/webhook', async (req, res) => {
+    const rawPayload = req.body;
+    let eventName = rawPayload?.event || 'mock';
+    let contactPhone = '';
+    let contactName = '';
+    let content = '';
+    let isOutgoing = false;
+
     try {
-        console.log('[Atendimento] /webhook CHAMADO! Evento:', req.body?.event);
-        console.log('[Atendimento] Payload completo:', JSON.stringify(req.body, null, 2));
-        let contactName = '';
-        let contactPhone = '';
+        console.log('[Atendimento] /webhook CHAMADO! Evento:', eventName);
+        console.log('[Atendimento] Payload completo:', JSON.stringify(rawPayload, null, 2));
         let channel = 'whatsapp';
-        let content = '';
-        let isOutgoing = false;
 
-        // Detecta se é o payload da Evolution API
-        if (req.body.event === 'messages.upsert') {
-            const msg = req.body.data.message;
-            if (!msg) {
-                 return res.json({ success: true, ignored: true });
-            }
-            
-            // Tratamento robusto para extrair texto de diferentes tipos de mensagens da Evolution API
-            if (msg.conversation) {
-                 content = msg.conversation;
-            } else if (msg.extendedTextMessage?.text) {
-                 content = msg.extendedTextMessage.text;
-            } else if (msg.imageMessage?.caption !== undefined) {
-                 content = msg.imageMessage.caption || '[Imagem]';
-            } else if (msg.videoMessage?.caption !== undefined) {
-                 content = msg.videoMessage.caption || '[Vídeo]';
-            } else if (msg.documentMessage?.caption !== undefined) {
-                 content = msg.documentMessage.caption || '[Documento]';
-            } else if (msg.audioMessage) {
-                 content = '[Áudio]';
-            } else if (msg.stickerMessage) {
-                 content = '[Figurinha]';
-            } else if (msg.locationMessage) {
-                 content = '[Localização]';
-            } else if (msg.buttonsResponseMessage?.selectedDisplayText) {
-                 content = msg.buttonsResponseMessage.selectedDisplayText;
-            } else if (msg.listResponseMessage?.singleSelectReply?.selectedRowId) {
-                 content = msg.listResponseMessage.title || '[Item de Lista]';
-            } else if (msg.templateButtonReplyMessage?.selectedId) {
-                 content = msg.templateButtonReplyMessage.selectedId;
-            } else {
-                 content = '[Mensagem de mídia/Desconhecida]';
-            }
-            
-            // Pega o número limpo
-            contactPhone = req.body.data.key.remoteJid.split('@')[0];
-            // Se a mensagem for do próprio bot/usuário (fromMe)
-            isOutgoing = !!req.body.data.key.fromMe;
-            
-            contactName = req.body.data.pushName || contactPhone;
-        } else {
-            // Mock payload
-            contactName = req.body.contactName;
-            contactPhone = req.body.contactPhone;
-            channel = req.body.channel || 'whatsapp';
-            content = req.body.content;
-            isOutgoing = req.body.direction === 'outgoing';
+        // 1. Sempre logar o recebimento inicial completo no painel do FrontEnd
+        addWebhookLog({
+            timestamp: new Date().toISOString(),
+            event: eventName || (rawPayload?.event ? String(rawPayload.event) : 'webhook_recebido'),
+            sender: rawPayload?.data?.key?.remoteJid?.split('@')[0] || rawPayload?.data?.remoteJid?.split('@')[0] || rawPayload?.sender || rawPayload?.phone || 'Verificando...',
+            content: 'Chegou um webhook (clique "Ver Payload JSON" no log)',
+            direction: 'incoming',
+            success: true,
+            payload: rawPayload
+        });
+
+        // 2. Extração Flexível (Evo GO, Evolution API, ou Mock)
+        
+        // Tenta capturar o número do remente (contactPhone)
+        if (rawPayload?.data?.key?.remoteJid) {
+            contactPhone = rawPayload.data.key.remoteJid.split('@')[0];
+        } else if (rawPayload?.data?.remoteJid) {
+            contactPhone = rawPayload.data.remoteJid.split('@')[0];
+        } else if (rawPayload?.sender) {
+            contactPhone = String(rawPayload.sender).replace(/[^0-9]/g, '');
+        } else if (rawPayload?.contactPhone) {
+            contactPhone = rawPayload.contactPhone;
+        } else if (rawPayload?.phone) {
+            contactPhone = String(rawPayload.phone).replace(/[^0-9]/g, '');
         }
 
-        if (!contactPhone || !content) {
-            return res.status(400).json({ error: 'Payload inválido ou sem conteúdo' });
+        // Tenta extrair o nome
+        contactName = rawPayload?.data?.pushName || rawPayload?.pushName || rawPayload?.contactName || rawPayload?.name || rawPayload?.senderName || contactPhone || 'Desconhecido';
+
+        // Verifica se foi nós que enviamos (isOutgoing)
+        isOutgoing = !!(rawPayload?.data?.key?.fromMe || rawPayload?.fromMe || rawPayload?.direction === 'outgoing');
+
+        // Tenta extrair a mensagem de texto
+        const msg = rawPayload?.data?.message || rawPayload?.message;
+        if (msg) {
+             if (msg.conversation) {
+                  content = msg.conversation;
+             } else if (msg.extendedTextMessage?.text) {
+                  content = msg.extendedTextMessage.text;
+             } else if (msg.imageMessage?.caption !== undefined) {
+                  content = msg.imageMessage.caption || '[Imagem]';
+             } else if (msg.videoMessage?.caption !== undefined) {
+                  content = msg.videoMessage.caption || '[Vídeo]';
+             } else if (msg.documentMessage?.caption !== undefined) {
+                  content = msg.documentMessage.caption || '[Documento]';
+             } else if (msg.audioMessage) {
+                  content = '[Áudio]';
+             } else if (msg.stickerMessage) {
+                  content = '[Figurinha]';
+             } else if (msg.locationMessage) {
+                  content = '[Localização]';
+             } else if (msg.buttonsResponseMessage?.selectedDisplayText) {
+                  content = msg.buttonsResponseMessage.selectedDisplayText;
+             } else if (msg.listResponseMessage?.singleSelectReply?.selectedRowId) {
+                  content = msg.listResponseMessage.title || '[Item de Lista]';
+             } else if (msg.templateButtonReplyMessage?.selectedId) {
+                  content = msg.templateButtonReplyMessage.selectedId;
+             } else if (typeof msg === 'string') {
+                  content = msg;
+             } else if (msg.text) {
+                  content = msg.text;
+             } else {
+                  content = '[Objeto Mídia]';
+             }
+        } else if (rawPayload?.text || rawPayload?.body) {
+             content = rawPayload.text || rawPayload.body;
+        } else if (rawPayload?.content) {
+             content = rawPayload.content;
+        } else if (rawPayload?.data?.text || rawPayload?.data?.body) {
+             content = rawPayload.data.text || rawPayload.data.body;
         }
+
+        // Se mesmo assim não achar telefone ou conteúdo, FORÇA a aparecer na central para debugar!
+        if (!contactPhone) {
+            contactPhone = '99999999999'; // Telefone fictício para forçar a aparecer na central
+            contactName = 'Evo_GO_Debug (' + (eventName || 'Desconhecido') + ')';
+        }
+        if (!content) {
+            // Se não encontrou mensagem, joga o payload inteiro como mensagem!
+            content = "[Evo Debug] Não achou texto. Payload: " + JSON.stringify(rawPayload).substring(0, 500);
+        }
+
+        // Removemos o "return res.status(400)" que rejeitava a mensagem. 
+        // Agora TUDO vai pra central de mensagens!
 
         const db = await getDB();
         
@@ -248,9 +327,29 @@ router.post('/webhook', async (req, res) => {
             handleCustomerMessage(conv.id);
         }
 
+        addWebhookLog({
+            timestamp: now,
+            event: eventName,
+            sender: `${contactName} (${contactPhone})`,
+            content: content,
+            direction: directionToSave,
+            success: true,
+            payload: rawPayload
+        });
+
         res.json({ success: true });
     } catch(err: any) {
         console.error('[Atendimento] Webhook Error:', err);
+        addWebhookLog({
+            timestamp: new Date().toISOString(),
+            event: eventName,
+            sender: contactPhone || 'Erro',
+            content: content || 'Erro',
+            direction: 'incoming',
+            success: false,
+            error: err.message || 'Erro interno no processamento',
+            payload: rawPayload
+        });
         res.status(500).json({ error: err.message });
     }
 });

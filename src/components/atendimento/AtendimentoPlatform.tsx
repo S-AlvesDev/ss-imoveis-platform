@@ -1,10 +1,59 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { Menu, MessageSquare, Search, Send, User, Clock, Settings, UserCheck, Bot, Info, X } from 'lucide-react';
+import { Menu, MessageSquare, Search, Send, User, Clock, Settings, UserCheck, Bot, Info, X, CheckCircle, AlertTriangle, RefreshCw, FileText, Terminal, ExternalLink, Globe, Key, Copy, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AtendimentoPlatform({ user }: { user: any }) {
     const [conversations, setConversations] = useState<any[]>([]);
+    const [webhookLogs, setWebhookLogs] = useState<any[]>([]);
+    const [envStatus, setEnvStatus] = useState<any>({
+        EVOLUTION_API_URL: '',
+        EVOLUTION_API_KEY: '',
+        EVOLUTION_INSTANCE: '',
+        GEMINI_API_KEY: '',
+        serverTime: ''
+    });
+    const [expandedLogIndex, setExpandedLogIndex] = useState<number | null>(null);
+    const [isLoadingEnv, setIsLoadingEnv] = useState(false);
+
+    const loadWebhookLogs = async () => {
+        try {
+            const res = await fetch('/api/atendimento/webhook-logs');
+            if (res.ok) {
+                const logs = await res.json();
+                setWebhookLogs(logs);
+            }
+        } catch (err) {
+            console.error('Error loading webhook logs', err);
+        }
+    };
+
+    const loadEnvStatus = async () => {
+        setIsLoadingEnv(true);
+        try {
+            const res = await fetch('/api/atendimento/status-env');
+            if (res.ok) {
+                const data = await res.json();
+                setEnvStatus(data);
+            }
+        } catch (err) {
+            console.error('Error loading env status', err);
+        } finally {
+            setIsLoadingEnv(false);
+        }
+    };
+
+    const clearWebhookLogs = async () => {
+        try {
+            const res = await fetch('/api/atendimento/webhook-logs/clear', { method: 'POST' });
+            if (res.ok) {
+                setWebhookLogs([]);
+                toast.success('Histórico de Webhooks limpo!');
+            }
+        } catch (err: any) {
+            toast.error(err.message);
+        }
+    };
     const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
     const [messages, setMessages] = useState<any[]>([]);
     const [msgInput, setMsgInput] = useState('');
@@ -105,6 +154,8 @@ export default function AtendimentoPlatform({ user }: { user: any }) {
     useEffect(() => {
         loadConversations();
         loadAgents();
+        loadEnvStatus();
+        loadWebhookLogs();
 
         const token = localStorage.getItem('token');
         const newSocket = io({ auth: { token } });
@@ -134,6 +185,10 @@ export default function AtendimentoPlatform({ user }: { user: any }) {
 
         newSocket.on('atendimento_conversation_update', () => {
             loadConversations();
+        });
+
+        newSocket.on('atendimento_webhook_log_new', (log) => {
+            setWebhookLogs(prev => [log, ...prev].slice(0, 50));
         });
 
         setSocket(newSocket);
@@ -485,13 +540,53 @@ export default function AtendimentoPlatform({ user }: { user: any }) {
             </div>
             </div>
             ) : (
-                <div className="flex-1 bg-white overflow-y-auto p-6">
-                    <div className="max-w-4xl mx-auto space-y-6">
-                         <div>
-                             <h2 className="text-2xl font-bold text-gray-900 mb-2">Configuração de Agentes IA</h2>
-                             <p className="text-sm text-gray-500 mb-6">Integre provedores, edite prompts e gerencie o fallback humano.</p>
+                <div className="flex-1 bg-slate-50 overflow-y-auto p-6">
+                    <div className="max-w-7xl mx-auto space-y-8">
+                         
+                         {/* Seção Superior de Cabeçalho */}
+                         <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+                             <div>
+                                 <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                                     <Settings className="w-6 h-6 text-blue-600" />
+                                     Painel de Integração & Ajustes
+                                 </h2>
+                                 <p className="text-sm text-gray-500 mt-1 font-medium">
+                                     Gerencie seus agentes de inteligência artificial e configure a conexão com o WhatsApp via Evolution API para o domínio <span className="font-semibold text-blue-600">ssimoveisbrasil.app</span>.
+                                 </p>
+                             </div>
+                             <div className="flex items-center gap-2">
+                                 <button
+                                     type="button"
+                                     onClick={() => {
+                                         loadEnvStatus();
+                                         loadWebhookLogs();
+                                         toast.success('Diagnóstico de rede atualizado!');
+                                     }}
+                                     className="flex items-center gap-1.5 px-4 py-2 bg-blue-50 text-blue-700 text-sm font-semibold rounded-lg hover:bg-blue-100 transition"
+                                 >
+                                     <RefreshCw className={`w-4 h-4 ${isLoadingEnv ? 'animate-spin' : ''}`} />
+                                     Forçar Diagnóstico
+                                 </button>
+                             </div>
+                         </div>
+
+                         {/* Grid Principal Dual Column */}
+                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                              
-                             <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-6">
+                             {/* Coluna da Esquerda: Agentes IA & Simulador */}
+                             <div className="space-y-6">
+                                 <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-xs">
+                                     <div className="flex items-center justify-between mb-4">
+                                         <div>
+                                             <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                                 <Bot className="w-5 h-5 text-purple-600" />
+                                                 Agentes de Inteligência Artificial
+                                             </h3>
+                                             <p className="text-xs text-gray-500 mt-0.5">Defina o comportamento e o modelo preditivo padrão no atendimento humano ou automatizado.</p>
+                                         </div>
+                                     </div>
+
+                                     <div className="space-y-4">
                                   {agents.map(agent => (
                                       <div key={agent.id} className="p-4 border-b border-gray-100 last:border-0 flex justify-between items-center hover:bg-gray-50">
                                           <div>
@@ -559,9 +654,249 @@ export default function AtendimentoPlatform({ user }: { user: any }) {
                              )}
                          </div>
 
-                         <div>
-                             <h2 className="text-xl font-bold text-gray-900 mt-10 mb-4">Simulador de Webhook (Testes)</h2>
-                             <button
+                             </div>
+
+                             {/* Coluna da Direita: WhatsApp e Evolution Webhook Central */}
+                             <div className="space-y-6">
+                                 
+                                 {/* Caixa 1: Endereço de Apontamento de Webhook */}
+                                 <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-xs">
+                                     <div className="flex items-center gap-2 mb-2">
+                                         <Globe className="w-5 h-5 text-blue-600" />
+                                         <h3 className="text-lg font-bold text-gray-900 animate-fade-in">Endereço Oficial de Webhook</h3>
+                                     </div>
+                                     <p className="text-xs text-gray-500 mb-4">
+                                         Para que as mensagens do WhatsApp cheguem nesta central, a sua Evolution API precisa disparar eventos para esta URL exata:
+                                     </p>
+
+                                     {/* Widget da URL do Webhook */}
+                                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex flex-col sm:flex-row items-center justify-between gap-3 mb-4">
+                                         <div className="font-mono text-xs text-blue-900 select-all font-semibold overflow-x-auto w-full break-all">
+                                             {typeof window !== 'undefined' ? `${window.location.origin}/api/atendimento/webhook` : 'https://ssimoveisbrasil.app/api/atendimento/webhook'}
+                                         </div>
+                                         <button
+                                             type="button"
+                                             onClick={() => {
+                                                 const url = typeof window !== 'undefined' ? `${window.location.origin}/api/atendimento/webhook` : 'https://ssimoveisbrasil.app/api/atendimento/webhook';
+                                                 navigator.clipboard.writeText(url);
+                                                 toast.success('Link do Webhook copiado!');
+                                             }}
+                                             className="flex items-center gap-1 text-[11px] font-bold bg-white text-blue-700 border border-blue-300 px-2.5 py-1.5 rounded-md hover:bg-blue-50 transition shrink-0"
+                                         >
+                                             <Copy className="w-3.5 h-3.5" />
+                                             Copiar URL
+                                         </button>
+                                     </div>
+
+                                     {/* Requisito de Evento na Evolution */}
+                                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 space-y-1">
+                                         <div className="font-bold flex items-center gap-1.5 text-amber-805">
+                                             <AlertTriangle className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
+                                             Ativar Evento na API:
+                                         </div>
+                                         <p className="text-xs">
+                                             No painel do Evo GO ou Evolution, em **Webhooks**, preencha a URL acima e ligue o evento de recepção de mensagens <span className="font-mono bg-amber-100 px-1 py-0.5 rounded text-amber-955 font-bold">MESSAGE</span> (ou <span className="font-mono bg-amber-100 px-1 py-0.5 rounded text-amber-955 font-bold">MESSAGES_UPSERT</span> em algumas versões).
+                                         </p>
+                                     </div>
+                                 </div>
+
+                                 {/* Caixa 2: Credenciais e diagnóstico de Servidor */}
+                                 <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-xs">
+                                     <h3 className="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
+                                         <Key className="w-5 h-5 text-emerald-600" />
+                                         Variáveis de Ambiente (Render Dashboard)
+                                     </h3>
+                                     <p className="text-xs text-gray-555 mb-4">Estas variáveis precisam estar configuradas no painel do Render:</p>
+
+                                     <div className="space-y-2.5 bg-transparent">
+                                         <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 text-xs border border-gray-100">
+                                              <span className="font-mono text-gray-650 font-semibold text-left">EVOLUTION_API_URL</span>
+                                              {envStatus.EVOLUTION_API_URL ? (
+                                                  <span className="bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded font-mono text-[11px] font-bold truncate max-w-[210px]" title={envStatus.EVOLUTION_API_URL}>
+                                                      {envStatus.EVOLUTION_API_URL}
+                                                  </span>
+                                              ) : (
+                                                  <span className="text-amber-605 font-bold flex items-center gap-1">
+                                                      <AlertTriangle className="w-3.5 h-3.5" /> Ausente
+                                                  </span>
+                                              )}
+                                         </div>
+
+                                         <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 text-xs border border-gray-100">
+                                              <span className="font-mono text-gray-655 font-semibold text-left">
+                                                  EVOLUTION_API_KEY
+                                                  <span className="block text-[8px] text-gray-400 font-sans font-normal mt-0.5">Token de Instância ou Token Global</span>
+                                              </span>
+                                              {envStatus.EVOLUTION_API_KEY === 'Ausente/Não configurado' ? (
+                                                  <span className="text-amber-605 font-bold flex items-center gap-1">
+                                                      <AlertTriangle className="w-3.5 h-3.5" /> Ausente
+                                                  </span>
+                                              ) : (
+                                                  <span className="bg-emerald-100 text-emerald-800 px-3 py-0.5 rounded font-mono text-[11px] font-bold">
+                                                      Configurado ✓
+                                                  </span>
+                                              )}
+                                         </div>
+
+                                         <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 text-xs border border-gray-100">
+                                              <span className="font-mono text-gray-655 font-semibold text-left">EVOLUTION_INSTANCE</span>
+                                              {envStatus.EVOLUTION_INSTANCE ? (
+                                                  <span className="bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded font-mono text-[11px] font-bold">
+                                                      {envStatus.EVOLUTION_INSTANCE}
+                                                  </span>
+                                              ) : (
+                                                  <span className="text-amber-605 font-bold flex items-center gap-1">
+                                                      <AlertTriangle className="w-3.5 h-3.5" /> Ausente
+                                                  </span>
+                                              )}
+                                         </div>
+
+                                         <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 text-xs border border-gray-100">
+                                              <span className="font-mono text-gray-655 font-semibold text-left">GEMINI_API_KEY</span>
+                                              {envStatus.GEMINI_API_KEY === 'Ausente/Não configurado' ? (
+                                                  <span className="text-amber-650 font-bold flex items-center gap-1">
+                                                      <AlertTriangle className="w-3.5 h-3.5" /> Ausente
+                                                  </span>
+                                              ) : (
+                                                  <span className="bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded font-mono text-[11px] font-bold">
+                                                      Configurado ✓
+                                                  </span>
+                                              )}
+                                         </div>
+                                     </div>
+
+                                     {/* Dica da sua dúvida */}
+                                     <div className="mt-4 p-3 bg-blue-50 border border-blue-150 rounded-lg text-xs leading-relaxed text-blue-955">
+                                         <p className="font-bold text-blue-900 flex items-center gap-1.5 font-sans">
+                                             <Info className="w-4 h-4 text-blue-600 shrink-0" />
+                                             Dica Importante sobre o Token da Instância:
+                                         </p>
+                                         <p className="mt-1 text-gray-700 font-sans leading-relaxed">
+                                             Sim! O campo <span className="font-mono text-slate-1000 font-bold bg-white px-1 py-0.5 rounded border border-blue-100">EVOLUTION_API_KEY</span> recebe perfeitamente o seu **Token de Instância** da Evolution API caso você não use o token global de administrador. Isso garante autenticação segura exclusiva para enviar mensagens desta conta!
+                                         </p>
+                                     </div>
+                                 </div>
+
+                                 {/* Caixa 3: Passo a passo de Configuração no Render */}
+                                 <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-xs">
+                                     <h3 className="text-sm font-bold text-gray-850 mb-3 flex items-center gap-1.5">
+                                         <ExternalLink className="w-4.5 h-4.5 text-blue-600" />
+                                         Guia Passo-a-Passo no Render
+                                     </h3>
+                                     <div className="space-y-3.5 text-xs text-gray-650 leading-relaxed">
+                                         <div className="flex gap-2.5">
+                                             <span className="flex items-center justify-center bg-blue-100 text-blue-700 w-5 h-5 rounded-full text-xs font-bold shrink-0 mt-0.5">1</span>
+                                             <p>Acesse o painel web em **https://dashboard.render.com** e faça login na sua conta.</p>
+                                         </div>
+                                         <div className="flex gap-2.5">
+                                             <span className="flex items-center justify-center bg-blue-100 text-blue-700 w-5 h-5 rounded-full text-xs font-bold shrink-0 mt-0.5">2</span>
+                                             <p>Clique no Web Service que você criou para o seu site (<span className="font-semibold text-gray-800">ssimoveisbrasil.app</span>).</p>
+                                         </div>
+                                         <div className="flex gap-2.5">
+                                             <span className="flex items-center justify-center bg-blue-100 text-blue-700 w-5 h-5 rounded-full text-xs font-bold shrink-0 mt-0.5">3</span>
+                                             <p>No menu lateral esquerdo, clique na aba **Environment** (Configurações de ambiente).</p>
+                                         </div>
+                                         <div className="flex gap-2.5">
+                                             <span className="flex items-center justify-center bg-blue-100 text-blue-700 w-5 h-5 rounded-full text-xs font-bold shrink-0 mt-0.5">4</span>
+                                             <p>Clique em **Add Environment Variable** e insira as chaves acima um por uma.</p>
+                                         </div>
+                                         <div className="flex gap-2.5">
+                                             <span className="flex items-center justify-center bg-blue-100 text-blue-700 w-5 h-5 rounded-full text-xs font-bold shrink-0 mt-0.5">5</span>
+                                             <p>Clique no botão azul **Save Changes**. O Render iniciará automaticamente uma nova compilação e atualizará seu sistema em segundos!</p>
+                                         </div>
+                                     </div>
+                                 </div>
+
+                                 {/* Caixa 4: Telemetria de Webhook em Tempo Real (Live Tracer) */}
+                                 <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-xs">
+                                     <div className="flex items-center justify-between mb-3">
+                                         <div>
+                                             <h3 className="text-lg font-bold text-gray-900 flex items-center gap-1.5">
+                                                 <Terminal className="w-5 h-5 text-slate-800" />
+                                                 Rastreador de Webhooks em Tempo Real
+                                             </h3>
+                                             <p className="text-[11px] text-gray-500">Veja instantaneamente cada mensagem que a Evolution API envia para o site.</p>
+                                         </div>
+                                         {webhookLogs.length > 0 && (
+                                             <button 
+                                                 type="button"
+                                                 onClick={clearWebhookLogs}
+                                                 className="text-gray-400 hover:text-red-500 text-xs font-semibold transition bg-transparent border-0 outline-none cursor-pointer"
+                                             >
+                                                 Limpar Logs
+                                             </button>
+                                         )}
+                                     </div>
+
+                                     <div className="bg-slate-900 text-slate-100 font-mono text-xs rounded-lg overflow-hidden border border-slate-800 animate-fade-in">
+                                         <div className="bg-slate-850 px-4 py-2 flex items-center justify-between text-slate-400 border-b border-slate-800 text-[10px]">
+                                             <span>ESCUTADOR DE WEBHOOK INTEGRADOR</span>
+                                             <span className="flex items-center gap-1">
+                                                 <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse inline-block" />
+                                                 MONITORANDO
+                                             </span>
+                                         </div>
+
+                                         <div className="max-h-72 overflow-y-auto p-3 space-y-2">
+                                             {webhookLogs.length === 0 ? (
+                                                 <div className="text-center py-8 text-slate-500 space-y-2">
+                                                     <p className="animate-pulse text-blue-400 font-sans">◯ Aguardando nova atividade de webhook no site...</p>
+                                                     <p className="text-[10px] font-sans text-slate-600 px-4">
+                                                         Dica: Envie uma mensagem no seu WhatsApp conectado. Se os logs de rede do seu Evolution estiverem corretos, a mensagem aparecerá neste painel de tempo real perfeitamente!
+                                                     </p>
+                                                 </div>
+                                             ) : (
+                                                 webhookLogs.map((log, index) => {
+                                                     const isExpanded = expandedLogIndex === index;
+                                                     return (
+                                                         <div key={index} className="p-2 border border-slate-800 rounded bg-slate-950/45 hover:bg-slate-950 transition">
+                                                             <div className="flex items-center justify-between text-[11px] cursor-pointer" onClick={() => setExpandedLogIndex(isExpanded ? null : index)}>
+                                                                 <div className="flex items-center gap-1.5 truncate">
+                                                                     {log.success ? (
+                                                                         <span className="text-emerald-400 font-bold">✓ [SUCESSO]</span>
+                                                                     ) : (
+                                                                         <span className="text-rose-400 font-bold">✗ [FALHA]</span>
+                                                                     )}
+                                                                     <span className="text-slate-400 uppercase font-semibold text-[10px]">{log.event}</span>
+                                                                     <span className="text-slate-605">|</span>
+                                                                     <span className="text-blue-300 truncate font-semibold" title={log.sender}>{log.sender}</span>
+                                                                 </div>
+                                                                 <div className="flex items-center gap-2 shrink-0">
+                                                                     <span className="text-slate-555 text-[9px]">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                                                                     <span className="text-blue-500 font-bold text-[10px] whitespace-nowrap">{isExpanded ? 'Ocultar' : 'Ver JSON'}</span>
+                                                                 </div>
+                                                             </div>
+                                                             
+                                                             <div className="mt-1.5 pl-4 text-slate-300 font-sans text-xs break-words font-medium">
+                                                                 {log.content}
+                                                             </div>
+
+                                                             {log.error && (
+                                                                 <div className="mt-1 pl-4 text-rose-450 text-[11px] font-sans">
+                                                                     Erro: {log.error}
+                                                                 </div>
+                                                             )}
+
+                                                             {isExpanded && (
+                                                                 <div className="mt-3 border-t border-slate-800 pt-2 text-[10px] text-slate-400 space-y-1">
+                                                                     <p className="font-bold text-blue-400">[DATA PAYLOAD COMPLETA]:</p>
+                                                                     <pre className="p-2 bg-slate-900 rounded overflow-x-auto text-[10.5px] max-h-48 text-slate-300 font-mono leading-relaxed font-normal">
+                                                                         {JSON.stringify(log.payload, null, 2)}
+                                                                     </pre>
+                                                                 </div>
+                                                             )}
+                                                         </div>
+                                                     );
+                                                 })
+                                             )}
+                                         </div>
+                                     </div>
+                                 </div>
+
+                                 {/* Simulador compactado integrado */}
+                                 <div className="bg-white border border-gray-150 rounded-xl p-5 shadow-xs">
+                                     <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 font-sans">Simulador Local (Controle rápido)</h4>
+                                      <button
                                 onClick={async () => {
                                    try {
                                        await fetch('/api/atendimento/webhook', {
@@ -582,11 +917,13 @@ export default function AtendimentoPlatform({ user }: { user: any }) {
                                 className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-semibold transition"
                              >
                                 Simular Mensagem do João
-                             </button>
-                         </div>
-                    </div>
-                </div>
-            )}
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
         </div>
     );
 }
