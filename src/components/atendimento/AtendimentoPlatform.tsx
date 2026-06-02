@@ -41,13 +41,18 @@ export default function AtendimentoPlatform({ user }: { user: any }) {
         }
     };
 
-    const loadMessages = async (id: string) => {
+    const loadMessages = async (id: string, forceScroll = false) => {
         try {
             const res = await fetch(`/api/atendimento/conversations/${id}/messages`);
             if (res.ok) {
                 const data = await res.json();
-                setMessages(data);
-                setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+                setMessages(prev => {
+                    const hasNewMessage = prev.length !== data.length;
+                    if (hasNewMessage || forceScroll) {
+                        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+                    }
+                    return data;
+                });
             }
         } catch(err) {
             console.error(err);
@@ -91,6 +96,12 @@ export default function AtendimentoPlatform({ user }: { user: any }) {
         }
     };
 
+    const selectedConvIdRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        selectedConvIdRef.current = selectedConvId;
+    }, [selectedConvId]);
+
     useEffect(() => {
         loadConversations();
         loadAgents();
@@ -108,10 +119,10 @@ export default function AtendimentoPlatform({ user }: { user: any }) {
             // Push message to active chat
             setMessages(prev => {
                 // If it's for current active chat
-                if (selectedConvId === conversationId) {
+                if (selectedConvIdRef.current === conversationId) {
                     if (!prev.find(m => m.id === message.id)) {
                         const updated = [...prev, message];
-                         setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+                        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
                         return updated;
                     }
                 }
@@ -132,9 +143,22 @@ export default function AtendimentoPlatform({ user }: { user: any }) {
         };
     }, []);
 
+    // Polling fallback of conversations every 8 seconds
+    useEffect(() => {
+        const interval = setInterval(() => {
+            loadConversations();
+        }, 8000);
+        return () => clearInterval(interval);
+    }, []);
+
+    // Fetch messages on active chat selection or every 4 seconds as a robust fallback
     useEffect(() => {
         if (selectedConvId) {
-             loadMessages(selectedConvId);
+             loadMessages(selectedConvId, true);
+             const interval = setInterval(() => {
+                 loadMessages(selectedConvId, false);
+             }, 4000);
+             return () => clearInterval(interval);
         }
     }, [selectedConvId]);
 
