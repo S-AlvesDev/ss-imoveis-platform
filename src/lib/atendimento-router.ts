@@ -206,7 +206,8 @@ router.post('/webhook', async (req, res) => {
         });
 
         // Só processar mensagens novas
-        if (eventName && eventName !== 'messages.upsert' && eventName !== 'mock' && eventName !== 'webhook_recebido') {
+        const lowerEvent = eventName?.toLowerCase() || '';
+        if (lowerEvent && lowerEvent !== 'messages.upsert' && lowerEvent !== 'mock' && lowerEvent !== 'webhook_recebido' && lowerEvent !== 'message') {
              addWebhookLog({
                  timestamp: new Date().toISOString(),
                  event: eventName,
@@ -228,10 +229,35 @@ router.post('/webhook', async (req, res) => {
             mainMsgObj?.remoteJid,
             rawPayload?.data?.key?.remoteJid,
             rawPayload?.data?.Sender,
+            rawPayload?.Sender,
             rawPayload?.sender,
             rawPayload?.phone,
             rawPayload?.contactPhone
         ];
+
+        // Ignora mensagens de grupo ou broadcast estritamente
+        let isGroupMsg = false;
+        let groupJid = '';
+        for (let p of potentialPhones) {
+            if (p && typeof p === 'string' && (p.includes('@g.us') || p.includes('@broadcast') || p.includes('status@broadcast'))) {
+                isGroupMsg = true;
+                groupJid = p;
+                break;
+            }
+        }
+        
+        if (isGroupMsg) {
+            addWebhookLog({
+                timestamp: new Date().toISOString(),
+                event: eventName,
+                sender: String(groupJid).split('@')[0],
+                content: 'Ignorado: Evento de grupo ou status',
+                direction: 'incoming',
+                success: true,
+                payload: rawPayload
+            });
+            return res.status(200).json({ success: true, message: 'Ignorado (grupo/broadcast).' });
+        }
 
         for (let p of potentialPhones) {
             if (p && typeof p === 'string' && p.includes('@s.whatsapp.net') && !p.includes(':')) {
@@ -263,28 +289,13 @@ router.post('/webhook', async (req, res) => {
             }
         }
 
-        // Ignora mensagens de grupo ou broadcast
-        const remoteJidForGroup = mainMsgObj?.key?.remoteJid || mainMsgObj?.remoteJid || rawPayload?.data?.Sender || '';
-        if (typeof remoteJidForGroup === 'string' && (remoteJidForGroup.includes('@g.us') || remoteJidForGroup.includes('@broadcast') || remoteJidForGroup.includes('status@broadcast'))) {
-            addWebhookLog({
-                timestamp: new Date().toISOString(),
-                event: eventName,
-                sender: String(remoteJidForGroup).split('@')[0],
-                content: 'Ignorado: Evento de grupo ou status',
-                direction: 'incoming',
-                success: true,
-                payload: rawPayload
-            });
-            return res.status(200).json({ success: true, message: 'Ignorado (grupo/broadcast).' });
-        }
-
-        // Adiciona sinal de "+" se não tiver (ex: +5584991284470)
-        if (contactPhone && !contactPhone.startsWith('+')) {
-            contactPhone = '+' + contactPhone;
+        // Normalização E.164: remove caracteres não numéricos e garante o "+" no início
+        if (contactPhone) {
+            contactPhone = '+' + contactPhone.replace(/[^0-9]/g, '');
         }
 
         // Tenta extrair o nome
-        contactName = mainMsgObj?.pushName || rawPayload?.data?.pushName || rawPayload?.pushName || rawPayload?.contactName || rawPayload?.name || rawPayload?.senderName || contactPhone || 'Desconhecido';
+        contactName = mainMsgObj?.pushName || rawPayload?.data?.pushName || rawPayload?.pushName || rawPayload?.PushName || rawPayload?.contactName || rawPayload?.name || rawPayload?.senderName || contactPhone || 'Desconhecido';
 
         // Verifica se foi nós que enviamos (isOutgoing)
         isOutgoing = !!(mainMsgObj?.key?.fromMe || rawPayload?.data?.key?.fromMe || rawPayload?.fromMe || rawPayload?.direction === 'outgoing' || rawPayload?.data?.IsFromMe);
@@ -332,8 +343,8 @@ router.post('/webhook', async (req, res) => {
         } 
         
         if (!content) {
-             if (rawPayload?.text || rawPayload?.body) {
-                 content = rawPayload.text || rawPayload.body;
+             if (rawPayload?.text || rawPayload?.body || rawPayload?.Body) {
+                 content = rawPayload.text || rawPayload.body || rawPayload.Body;
              } else if (rawPayload?.content) {
                  content = rawPayload.content;
              } else if (rawPayload?.data?.text || rawPayload?.data?.body) {
@@ -342,15 +353,17 @@ router.post('/webhook', async (req, res) => {
         }
         
         // Verifica event type vindo customizado para fallback (Evolution wrapper ou Chatwoot wrapper)
-        const messageType = mainMsgObj?.messageType || rawPayload?.data?.messageType;
+        const messageType = mainMsgObj?.messageType || rawPayload?.data?.messageType || rawPayload?.Type || rawPayload?.type;
         if (!content && messageType) {
-            if (messageType.includes('image')) content = '[Imagem]';
-            else if (messageType.includes('video')) content = '[Vídeo]';
-            else if (messageType.includes('audio')) content = '[Áudio]';
-            else if (messageType.includes('sticker')) content = '[Figurinha]';
-            else if (messageType.includes('document')) content = '[Documento]';
-            else if (messageType.includes('location')) content = '[Localização]';
-            else if (messageType.includes('contact')) content = '[Contato]';
+            const mt = messageType.toLowerCase();
+            if (mt.includes('image')) content = '[Imagem]';
+            else if (mt.includes('video')) content = '[Vídeo]';
+            else if (mt.includes('audio')) content = '[Áudio]';
+            else if (mt.includes('sticker')) content = '[Figurinha]';
+            else if (mt.includes('document')) content = '[Documento]';
+            else if (mt.includes('location')) content = '[Localização]';
+            else if (mt.includes('contact')) content = '[Contato]';
+            else if (mt === 'media') content = '[Mídia]';
         }
 
         // Se não achou telefone ou a mensagem não tem conteúdo decifrável textual
