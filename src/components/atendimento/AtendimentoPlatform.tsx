@@ -319,7 +319,7 @@ export default function AtendimentoPlatform({ user }: { user: any }) {
                                   className={`p-4 cursor-pointer hover:bg-white transition-colors flex gap-3 ${selectedConvId === c.id ? 'bg-white border-l-4 border-blue-600 shadow-sm' : 'border-l-4 border-transparent'}`}
                                >
                                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-700 flex-shrink-0 relative">
-                                        {c.contactName ? c.contactName[0].toUpperCase() : '?'}
+                                        {c.contactName && !c.contactName.startsWith('+') ? c.contactName[0].toUpperCase() : <User size={20} />}
                                         {c.aiEnabled === 1 && <span className="absolute -bottom-1 -right-1 bg-green-500 text-white rounded-full p-0.5"><Bot size={10} /></span>}
                                    </div>
                                    <div className="flex-1 min-w-0">
@@ -350,7 +350,7 @@ export default function AtendimentoPlatform({ user }: { user: any }) {
                                        <X className="w-6 h-6" />
                                   </button>
                                   <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-700">
-                                       {activeConv?.contactName?.[0]?.toUpperCase() || '?'}
+                                       {activeConv?.contactName && !activeConv?.contactName.startsWith('+') ? activeConv?.contactName[0].toUpperCase() : <User size={18} />}
                                   </div>
                                   <div>
                                        <h3 className="font-bold text-gray-900 leading-tight">{activeConv?.contactName || activeConv?.contactPhone}</h3>

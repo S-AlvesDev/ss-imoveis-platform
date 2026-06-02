@@ -77,6 +77,7 @@ const triggerAIProcessing = async (conversationId: string) => {
                 if (ct) {
                     try {
                         const baseUrl = process.env.EVOLUTION_API_URL.replace(/\/$/, '');
+                        const purePhone = ct.phone.replace(/\D/g, '');
                         const resp = await fetch(`${baseUrl}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
                             method: 'POST',
                             headers: {
@@ -84,7 +85,7 @@ const triggerAIProcessing = async (conversationId: string) => {
                                 'apikey': process.env.EVOLUTION_API_KEY
                             },
                             body: JSON.stringify({
-                                number: ct.phone,
+                                number: purePhone,
                                 options: {
                                     delay: 1200,
                                     presence: 'composing'
@@ -113,9 +114,31 @@ const triggerAIProcessing = async (conversationId: string) => {
             console.error('[Atendimento] Erro na requisição do Gemini:', genErr);
             
             let errorMessage = `[Sistema] Erro no Agente IA: ${genErr.message || 'Falha ao processar.'}`;
+            let fallbackBotMessage = "";
+
             if (genErr?.status === 429 || String(genErr?.message).includes('429')) {
-                errorMessage = `[Sistema] Limite de uso da IA atingido (Quota Exceeded). O plano gratuito da API do Gemini esgotou para este minuto/dia. Para contornar, insira sua própria chave (API Key) nas configurações do applet. A IA será pausada nesta conversa.`;
+                errorMessage = `[Sistema] Limite de IA atingido (Quota 429). Ativando modo bot estático para continuar. A IA continua "tentando" processar, ou você pode desativar o botão IA ATIVA para fixar no modo manual/bot.`;
+                
+                const lastMsg = messages.length > 0 ? messages[messages.length - 1].content.trim() : '';
+                
+                 if (lastMsg === '1') {
+                     fallbackBotMessage = "Perfeito! Transferi seu atendimento para a fila de *Corretores*. Um especialista já vai te atender! 🏡";
+                     await db.run('UPDATE Conversations SET queue = ?, aiEnabled = 0 WHERE id = ?', ['Corretores', conversationId]);
+                     if (ioInstance) ioInstance.emit('atendimento_conversation_update', { conversationId, queue: 'Corretores', aiEnabled: 0 });
+                 } else if (lastMsg === '2') {
+                     fallbackBotMessage = "Muito bem, transferi você para o *Financeiro*! 💵 Em instantes alguém falará com você.";
+                     await db.run('UPDATE Conversations SET queue = ?, aiEnabled = 0 WHERE id = ?', ['Financeiro', conversationId]);
+                     if (ioInstance) ioInstance.emit('atendimento_conversation_update', { conversationId, queue: 'Financeiro', aiEnabled: 0 });
+                 } else if (lastMsg === '3') {
+                     fallbackBotMessage = "Certo! O setor *Administrativo* já foi notificado. 📂 Aguarde um instante...";
+                     await db.run('UPDATE Conversations SET queue = ?, aiEnabled = 0 WHERE id = ?', ['Administrativo', conversationId]);
+                     if (ioInstance) ioInstance.emit('atendimento_conversation_update', { conversationId, queue: 'Administrativo', aiEnabled: 0 });
+                 } else {
+                     fallbackBotMessage = "Olá! Ocorreu um limite no meu serviço de Inteligência Artificial no momento. 🤖\n\nVamos seguir pelo atendimento automatizado padrão. Qual departamento você deseja falar?\n\n1️⃣ - Corretores\n2️⃣ - Financeiro\n3️⃣ - Administrativo\n\n*Digite o número:*";
+                 }
+            } else {
                 await db.run('UPDATE Conversations SET aiEnabled = 0 WHERE id = ?', [conversationId]);
+                if (ioInstance) ioInstance.emit('atendimento_conversation_update', { conversationId, aiEnabled: 0 });
             }
 
             const messageId = uuidv4();
@@ -131,6 +154,34 @@ const triggerAIProcessing = async (conversationId: string) => {
                     conversationId,
                     message: { id: messageId, direction: 'internal_note', content: errorMessage, createdAt: now }
                 });
+            }
+
+            if (fallbackBotMessage) {
+                const replyId = uuidv4();
+                await db.run('INSERT INTO Messages (id, conversationId, direction, content, createdAt) VALUES (?, ?, ?, ?, ?)', 
+                    [replyId, conversationId, 'outgoing', fallbackBotMessage, new Date().toISOString()]);
+                
+                if (ioInstance) {
+                    ioInstance.emit('atendimento_new_message', { conversationId, message: { id: replyId, direction: 'outgoing', content: fallbackBotMessage, createdAt: new Date().toISOString() }});
+                }
+                
+                if (process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE) {
+                    const conv = await db.get('SELECT contactId FROM Conversations WHERE id = ?', [conversationId]);
+                    if (conv) {
+                        const ct = await db.get('SELECT phone FROM Contacts WHERE id = ?', [conv.contactId]);
+                        if (ct) {
+                            try {
+                                const baseUrl = process.env.EVOLUTION_API_URL.replace(/\/$/, '');
+                                const purePhone = ct.phone.replace(/\D/g, '');
+                                fetch(`${baseUrl}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', 'apikey': process.env.EVOLUTION_API_KEY },
+                                    body: JSON.stringify({ number: purePhone, options: { delay: 1000, presence: 'composing' }, text: fallbackBotMessage })
+                                });
+                            } catch (e) {}
+                        }
+                    }
+                }
             }
         }
         
@@ -438,6 +489,14 @@ router.post('/webhook', async (req, res) => {
                 [contactId, contactName, contactPhone, now]);
             contact = { id: contactId, name: contactName, phone: contactPhone };
             if (ioInstance) ioInstance.emit('atendimento_new_contact', contact);
+        } else {
+            // Update name if we got a real name and currently it's just the phone number or unknown
+            if (contactName && contactName !== 'Desconhecido' && !contactName.startsWith('+') && 
+               (!contact.name || contact.name === 'Desconhecido' || contact.name.startsWith('+'))) {
+                await db.run('UPDATE Contacts SET name = ? WHERE id = ?', [contactName, contact.id]);
+                contact.name = contactName;
+                if (ioInstance) ioInstance.emit('atendimento_contact_update', contact);
+            }
         }
 
         let conv = await db.get(`SELECT * FROM Conversations WHERE contactId = ? AND status IN ('open', 'pending', 'waiting_customer')`, [contact.id]);
@@ -455,19 +514,32 @@ router.post('/webhook', async (req, res) => {
         }
 
         const messageId = uuidv4();
-        const directionToSave = isOutgoing ? 'outgoing' : 'incoming';
+        let directionToSave = isOutgoing ? 'outgoing' : 'incoming';
         
-        await db.run(
-            'INSERT INTO Messages (id, conversationId, direction, content, createdAt) VALUES (?, ?, ?, ?, ?)',
-            [messageId, conv.id, directionToSave, content, now]
+        let insertMsg = true;
+        
+        // Deduplicate local echo of sent messages (checking within last 30 seconds)
+        const recent = await db.get(
+            `SELECT id FROM Messages WHERE conversationId = ? AND direction = 'outgoing' AND content = ? AND createdAt > datetime('now', '-30 seconds')`,
+            [conv.id, content]
         );
+        if (recent) {
+            insertMsg = false;
+        }
 
-        if (ioInstance) {
-            ioInstance.emit('atendimento_new_message', {
-                conversationId: conv.id,
-                message: { id: messageId, direction: directionToSave, content, createdAt: now }
-            });
-            ioInstance.emit('atendimento_conversation_update', { conversationId: conv.id, updatedAt: now });
+        if (insertMsg) {
+            await db.run(
+                'INSERT INTO Messages (id, conversationId, direction, content, createdAt) VALUES (?, ?, ?, ?, ?)',
+                [messageId, conv.id, directionToSave, content, now]
+            );
+
+            if (ioInstance) {
+                ioInstance.emit('atendimento_new_message', {
+                    conversationId: conv.id,
+                    message: { id: messageId, direction: directionToSave, content, createdAt: now }
+                });
+                ioInstance.emit('atendimento_conversation_update', { conversationId: conv.id, updatedAt: now });
+            }
         }
 
         // Apenas processa inteligência artificial (Gemini) se a mensagem for de vinda do cliente (não é outgoing)
@@ -556,6 +628,7 @@ router.post('/conversations/:id/messages', async (req, res) => {
                 if (ct) {
                     try {
                         const baseUrl = process.env.EVOLUTION_API_URL.replace(/\/$/, '');
+                        const purePhone = ct.phone.replace(/\D/g, '');
                         const resp = await fetch(`${baseUrl}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
                             method: 'POST',
                             headers: {
@@ -563,7 +636,7 @@ router.post('/conversations/:id/messages', async (req, res) => {
                                 'apikey': process.env.EVOLUTION_API_KEY
                             },
                             body: JSON.stringify({
-                                number: ct.phone,
+                                number: purePhone,
                                 options: {
                                     delay: 1200,
                                     presence: 'composing'
