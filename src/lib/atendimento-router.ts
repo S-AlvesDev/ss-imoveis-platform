@@ -76,7 +76,8 @@ const triggerAIProcessing = async (conversationId: string) => {
                 const ct = await db.get('SELECT phone FROM Contacts WHERE id = ?', [conv.contactId]);
                 if (ct) {
                     try {
-                        await fetch(`${process.env.EVOLUTION_API_URL}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
+                        const baseUrl = process.env.EVOLUTION_API_URL.replace(/\/$/, '');
+                        const resp = await fetch(`${baseUrl}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -84,9 +85,17 @@ const triggerAIProcessing = async (conversationId: string) => {
                             },
                             body: JSON.stringify({
                                 number: ct.phone,
+                                options: {
+                                    delay: 1200,
+                                    presence: 'composing'
+                                },
                                 text: replyText
                             })
                         });
+                        if (!resp.ok) {
+                            const errTxt = await resp.text();
+                            console.error('[Atendimento] Erro disparando Evolution na IA:', resp.status, errTxt);
+                        }
                     } catch (evoErr) {
                         console.error('[Atendimento] Erro ao enviar para Evolution:', evoErr);
                     }
@@ -103,7 +112,12 @@ const triggerAIProcessing = async (conversationId: string) => {
         } catch (genErr: any) {
             console.error('[Atendimento] Erro na requisição do Gemini:', genErr);
             
-            const errorMessage = `[Sistema] Erro no Agente IA: ${genErr.message || 'Falha ao processar.'}`;
+            let errorMessage = `[Sistema] Erro no Agente IA: ${genErr.message || 'Falha ao processar.'}`;
+            if (genErr?.status === 429 || String(genErr?.message).includes('429')) {
+                errorMessage = `[Sistema] Limite de uso da IA atingido (Quota Exceeded). O plano gratuito da API do Gemini esgotou para este minuto/dia. Para contornar, insira sua própria chave (API Key) nas configurações do applet. A IA será pausada nesta conversa.`;
+                await db.run('UPDATE Conversations SET aiEnabled = 0 WHERE id = ?', [conversationId]);
+            }
+
             const messageId = uuidv4();
             const now = new Date().toISOString();
 
@@ -319,7 +333,7 @@ router.post('/webhook', async (req, res) => {
         contactName = mainMsgObj?.pushName || rawPayload?.data?.pushName || rawPayload?.pushName || rawPayload?.PushName || rawPayload?.contactName || rawPayload?.name || rawPayload?.senderName || contactPhone || 'Desconhecido';
 
         // Verifica se foi nós que enviamos (isOutgoing)
-        isOutgoing = !!(mainMsgObj?.key?.fromMe || mainMsgObj?.IsFromMe || mainMsgObj?.fromMe || rawPayload?.data?.key?.fromMe || rawPayload?.fromMe || rawPayload?.direction === 'outgoing' || rawPayload?.data?.IsFromMe);
+        isOutgoing = !!(mainMsgObj?.key?.fromMe || mainMsgObj?.IsFromMe || mainMsgObj?.fromMe || mainMsgObj?.FromMe || rawPayload?.data?.key?.fromMe || rawPayload?.fromMe || rawPayload?.FromMe || rawPayload?.direction === 'outgoing' || rawPayload?.data?.IsFromMe);
 
         // Tenta extrair a mensagem de texto
         const msg = mainMsgObj?.message || mainMsgObj?.Message || mainMsgObj;
@@ -541,7 +555,8 @@ router.post('/conversations/:id/messages', async (req, res) => {
                 const ct = await db.get('SELECT phone FROM Contacts WHERE id = ?', [conv.contactId]);
                 if (ct) {
                     try {
-                        await fetch(`${process.env.EVOLUTION_API_URL}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
+                        const baseUrl = process.env.EVOLUTION_API_URL.replace(/\/$/, '');
+                        const resp = await fetch(`${baseUrl}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -549,9 +564,17 @@ router.post('/conversations/:id/messages', async (req, res) => {
                             },
                             body: JSON.stringify({
                                 number: ct.phone,
+                                options: {
+                                    delay: 1200,
+                                    presence: 'composing'
+                                },
                                 text: content
                             })
                         });
+                        if (!resp.ok) {
+                            const errTxt = await resp.text();
+                            console.error('[Atendimento] Erro disparando Evolution:', resp.status, errTxt);
+                        }
                     } catch (evoErr) {
                         console.error('[Atendimento] Erro ao enviar para Evolution (Humano):', evoErr);
                     }
