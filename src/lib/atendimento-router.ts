@@ -207,11 +207,16 @@ router.post('/webhook', async (req, res) => {
 
         // 2. Extração Flexível (Evo GO, Evolution API, ou Mock)
         
-        // Tenta capturar o número do remente (contactPhone)
-        if (rawPayload?.data?.key?.remoteJid) {
-            contactPhone = rawPayload.data.key.remoteJid.split('@')[0];
-        } else if (rawPayload?.data?.remoteJid) {
-            contactPhone = rawPayload.data.remoteJid.split('@')[0];
+        // Pega a mensagem base ( Evolution API v1 ou v2 ou array )
+        let mainMsgObj = rawPayload?.data?.message || rawPayload?.data?.messages?.[0] || rawPayload?.data || rawPayload;
+
+        // Tenta capturar o número do remetente (contactPhone)
+        if (mainMsgObj?.key?.remoteJid) {
+            contactPhone = mainMsgObj.key.remoteJid.split('@')[0];
+        } else if (mainMsgObj?.remoteJid) {
+            contactPhone = mainMsgObj.remoteJid.split('@')[0];
+        } else if (rawPayload?.data?.Sender) { // Evol formato novo lid
+            contactPhone = String(rawPayload.data.Sender).split('@')[0];
         } else if (rawPayload?.sender) {
             contactPhone = String(rawPayload.sender).replace(/[^0-9]/g, '');
         } else if (rawPayload?.contactPhone) {
@@ -220,14 +225,19 @@ router.post('/webhook', async (req, res) => {
             contactPhone = String(rawPayload.phone).replace(/[^0-9]/g, '');
         }
 
+        // Remove do telefone o sufixo :XXXX que às vezes vem com @s.whatsapp.net (ex: 5511999999999:12@s.whatsapp.net)
+        if (contactPhone && contactPhone.includes(':')) {
+            contactPhone = contactPhone.split(':')[0];
+        }
+
         // Tenta extrair o nome
-        contactName = rawPayload?.data?.pushName || rawPayload?.pushName || rawPayload?.contactName || rawPayload?.name || rawPayload?.senderName || contactPhone || 'Desconhecido';
+        contactName = mainMsgObj?.pushName || rawPayload?.data?.pushName || rawPayload?.pushName || rawPayload?.contactName || rawPayload?.name || rawPayload?.senderName || contactPhone || 'Desconhecido';
 
         // Verifica se foi nós que enviamos (isOutgoing)
-        isOutgoing = !!(rawPayload?.data?.key?.fromMe || rawPayload?.fromMe || rawPayload?.direction === 'outgoing');
+        isOutgoing = !!(mainMsgObj?.key?.fromMe || rawPayload?.data?.key?.fromMe || rawPayload?.fromMe || rawPayload?.direction === 'outgoing' || rawPayload?.data?.IsFromMe);
 
         // Tenta extrair a mensagem de texto
-        const msg = rawPayload?.data?.message || rawPayload?.message;
+        const msg = mainMsgObj?.message || mainMsgObj;
         if (msg) {
              if (msg.conversation) {
                   content = msg.conversation;
@@ -266,18 +276,20 @@ router.post('/webhook', async (req, res) => {
              content = rawPayload.data.text || rawPayload.data.body;
         }
 
-        // Se mesmo assim não achar telefone ou conteúdo, FORÇA a aparecer na central para debugar!
-        if (!contactPhone) {
-            contactPhone = '99999999999'; // Telefone fictício para forçar a aparecer na central
-            contactName = 'Evo_GO_Debug (' + (eventName || 'Desconhecido') + ')';
+        // Se não achou telefone ou conteúdo, trata como evento de status (Receipt, Presence, etc.)
+        if (!contactPhone || !content) {
+            addWebhookLog({
+                timestamp: new Date().toISOString(),
+                event: eventName,
+                sender: contactPhone || 'Sistema/Status',
+                content: 'Ignorado: Evento de status ou requisição sem mensagem',
+                direction: isOutgoing ? 'outgoing' : 'incoming',
+                success: true, // success true para não acusar erro na interface, é só um aviso estrutural
+                payload: rawPayload
+            });
+            // Retorna 200 OK para a Evolution API não ficar repetindo a entrega
+            return res.status(200).json({ success: true, message: 'Evento ignorado pois não é uma mensagem de chat.' });
         }
-        if (!content) {
-            // Se não encontrou mensagem, joga o payload inteiro como mensagem!
-            content = "[Evo Debug] Não achou texto. Payload: " + JSON.stringify(rawPayload).substring(0, 500);
-        }
-
-        // Removemos o "return res.status(400)" que rejeitava a mensagem. 
-        // Agora TUDO vai pra central de mensagens!
 
         const db = await getDB();
         
