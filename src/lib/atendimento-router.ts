@@ -182,8 +182,14 @@ router.get('/status-env', (req, res) => {
 
 // --- Webhook (Suporta MOCK e EVOLUTION API) ---
 router.post('/webhook', async (req, res) => {
-    const rawPayload = req.body;
-    let eventName = rawPayload?.event || 'mock';
+    let rawPayload = req.body;
+    
+    // Suporte a payloads em formato de array (Evolution V2 e outros)
+    if (Array.isArray(rawPayload) && rawPayload.length > 0) {
+        rawPayload = rawPayload[0];
+    }
+    
+    let eventName = rawPayload?.event || rawPayload?.event_type || 'message';
     let contactPhone = '';
     let contactName = '';
     let content = '';
@@ -221,7 +227,7 @@ router.post('/webhook', async (req, res) => {
         }
 
         // Pega a mensagem base ( Evolution API v1 ou v2 ou array )
-        let mainMsgObj = rawPayload?.data?.message || rawPayload?.data?.messages?.[0] || rawPayload?.data || rawPayload;
+        let mainMsgObj = rawPayload?.data?.message || rawPayload?.data?.messages?.[0] || rawPayload?.Message || rawPayload?.message || rawPayload?.data || rawPayload;
 
         // Tenta capturar o número do remetente (contactPhone) priorizando @s.whatsapp.net
         let potentialPhones = [
@@ -277,6 +283,21 @@ router.post('/webhook', async (req, res) => {
         }
 
         if (!contactPhone) {
+            // Último recurso absoluto: Regex no JSON completo
+            const strPayload = typeof rawPayload === 'object' ? JSON.stringify(rawPayload) : String(rawPayload);
+            const match = strPayload.match(/["']?([^"'\s]+@s\.whatsapp\.net)["']?/);
+            if (match && match[1]) {
+                contactPhone = match[1].split('@')[0].split(':')[0];
+            } else {
+                // Tenta @lid como ultima alternativa
+                const matchLid = strPayload.match(/["']?([^"'\s]+@lid)["']?/);
+                if (matchLid && matchLid[1]) {
+                    contactPhone = matchLid[1].split('@')[0].split(':')[0];
+                }
+            }
+        }
+
+        if (!contactPhone) {
             // Em ultimo caso pega qualquer coisa
             for (let p of potentialPhones) {
                 if (p && typeof p === 'string') {
@@ -298,10 +319,10 @@ router.post('/webhook', async (req, res) => {
         contactName = mainMsgObj?.pushName || rawPayload?.data?.pushName || rawPayload?.pushName || rawPayload?.PushName || rawPayload?.contactName || rawPayload?.name || rawPayload?.senderName || contactPhone || 'Desconhecido';
 
         // Verifica se foi nós que enviamos (isOutgoing)
-        isOutgoing = !!(mainMsgObj?.key?.fromMe || rawPayload?.data?.key?.fromMe || rawPayload?.fromMe || rawPayload?.direction === 'outgoing' || rawPayload?.data?.IsFromMe);
+        isOutgoing = !!(mainMsgObj?.key?.fromMe || mainMsgObj?.IsFromMe || mainMsgObj?.fromMe || rawPayload?.data?.key?.fromMe || rawPayload?.fromMe || rawPayload?.direction === 'outgoing' || rawPayload?.data?.IsFromMe);
 
         // Tenta extrair a mensagem de texto
-        const msg = mainMsgObj?.message || mainMsgObj;
+        const msg = mainMsgObj?.message || mainMsgObj?.Message || mainMsgObj;
         
         if (msg) {
              // Evolution messages
@@ -366,8 +387,20 @@ router.post('/webhook', async (req, res) => {
             else if (mt === 'media') content = '[Mídia]';
         }
 
+        if (!content) {
+             // Fallback final: buscar por chaves comuns no JSON
+             const strPayload = typeof rawPayload === 'object' ? JSON.stringify(rawPayload) : String(rawPayload);
+             const convMatch = strPayload.match(/"conversation"\s*:\s*"([^"]+)"/i) || strPayload.match(/"text"\s*:\s*"([^"]+)"/i) || strPayload.match(/"body"\s*:\s*"([^"]+)"/i);
+             if (convMatch && convMatch[1]) {
+                 content = convMatch[1];
+             } else if (strPayload.match(/"imageMessage"/i)) content = '[Imagem]';
+             else if (strPayload.match(/"videoMessage"/i)) content = '[Vídeo]';
+             else if (strPayload.match(/"audioMessage"/i)) content = '[Áudio]';
+             else if (strPayload.match(/"stickerMessage"/i)) content = '[Figurinha]';
+        }
+
         // Se não achou telefone ou a mensagem não tem conteúdo decifrável textual
-        if (!contactPhone || !content || content === '[Objeto Mídia]') {
+        if (!contactPhone || !content) {
             addWebhookLog({
                 timestamp: new Date().toISOString(),
                 event: eventName,
