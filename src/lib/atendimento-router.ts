@@ -82,7 +82,8 @@ const triggerAIProcessing = async (conversationId: string) => {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
-                                'apikey': process.env.EVOLUTION_API_KEY
+                                'apikey': process.env.EVOLUTION_API_KEY,
+                                'Authorization': `Bearer ${process.env.EVOLUTION_API_KEY}`
                             },
                             body: JSON.stringify({
                                 number: purePhone,
@@ -90,6 +91,7 @@ const triggerAIProcessing = async (conversationId: string) => {
                                     delay: 1200,
                                     presence: 'composing'
                                 },
+                                textMessage: { text: replyText },
                                 text: replyText
                             })
                         });
@@ -175,8 +177,17 @@ const triggerAIProcessing = async (conversationId: string) => {
                                 const purePhone = ct.phone.replace(/\D/g, '');
                                 fetch(`${baseUrl}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
                                     method: 'POST',
-                                    headers: { 'Content-Type': 'application/json', 'apikey': process.env.EVOLUTION_API_KEY },
-                                    body: JSON.stringify({ number: purePhone, options: { delay: 1000, presence: 'composing' }, text: fallbackBotMessage })
+                                    headers: { 
+                                        'Content-Type': 'application/json', 
+                                        'apikey': process.env.EVOLUTION_API_KEY,
+                                        'Authorization': `Bearer ${process.env.EVOLUTION_API_KEY}`
+                                    },
+                                    body: JSON.stringify({ 
+                                        number: purePhone, 
+                                        options: { delay: 1000, presence: 'composing' }, 
+                                        textMessage: { text: fallbackBotMessage },
+                                        text: fallbackBotMessage 
+                                    })
                                 });
                             } catch (e) {}
                         }
@@ -384,7 +395,19 @@ router.post('/webhook', async (req, res) => {
         contactName = mainMsgObj?.pushName || rawPayload?.data?.pushName || rawPayload?.pushName || rawPayload?.PushName || rawPayload?.contactName || rawPayload?.name || rawPayload?.senderName || contactPhone || 'Desconhecido';
 
         // Verifica se foi nós que enviamos (isOutgoing)
-        isOutgoing = !!(mainMsgObj?.key?.fromMe || mainMsgObj?.IsFromMe || mainMsgObj?.fromMe || mainMsgObj?.FromMe || rawPayload?.data?.key?.fromMe || rawPayload?.fromMe || rawPayload?.FromMe || rawPayload?.direction === 'outgoing' || rawPayload?.data?.IsFromMe);
+        isOutgoing = !!(
+            mainMsgObj?.key?.fromMe || 
+            mainMsgObj?.IsFromMe || 
+            mainMsgObj?.fromMe || 
+            mainMsgObj?.FromMe || 
+            rawPayload?.data?.key?.fromMe || 
+            rawPayload?.fromMe || 
+            rawPayload?.FromMe || 
+            rawPayload?.direction === 'outgoing' || 
+            rawPayload?.data?.IsFromMe ||
+            (rawPayload?.data?.key?.id && String(rawPayload.data.key.id).startsWith('BAE5')) ||
+            (mainMsgObj?.key?.id && String(mainMsgObj.key.id).startsWith('BAE5'))
+        );
 
         // Tenta extrair a mensagem de texto
         const msg = mainMsgObj?.message || mainMsgObj?.Message || mainMsgObj;
@@ -633,7 +656,8 @@ router.post('/conversations/:id/messages', async (req, res) => {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
-                                'apikey': process.env.EVOLUTION_API_KEY
+                                'apikey': process.env.EVOLUTION_API_KEY,
+                                'Authorization': `Bearer ${process.env.EVOLUTION_API_KEY}`
                             },
                             body: JSON.stringify({
                                 number: purePhone,
@@ -641,6 +665,7 @@ router.post('/conversations/:id/messages', async (req, res) => {
                                     delay: 1200,
                                     presence: 'composing'
                                 },
+                                textMessage: { text: content },
                                 text: content
                             })
                         });
