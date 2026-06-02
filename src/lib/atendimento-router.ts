@@ -1,0 +1,415 @@
+import express from 'express';
+import { getDB } from './atendimento-db.js';
+import { v4 as uuidv4 } from 'uuid';
+import { Server } from 'socket.io';
+import { GoogleGenAI } from '@google/genai';
+
+const router = express.Router();
+let ioInstance: Server | null = null;
+
+export const setSocketIo = (io: Server) => {
+    ioInstance = io;
+};
+
+// --- Debounce Logic ---
+const aiDebounceMap = new Map<string, NodeJS.Timeout>();
+
+const triggerAIProcessing = async (conversationId: string) => {
+    try {
+        const db = await getDB();
+        const conv = await db.get('SELECT * FROM Conversations WHERE id = ?', [conversationId]);
+        
+        if (!conv || !conv.aiEnabled) return;
+
+        const messages = await db.all('SELECT * FROM Messages WHERE conversationId = ? ORDER BY createdAt ASC LIMIT 50', [conversationId]);
+        const agent = await db.get('SELECT * FROM AgentSessions WHERE isDefault = 1 AND active = 1');
+        
+        if (!agent) {
+             console.log('[Atendimento] Nenhum agente IA configurado.');
+             return;
+        }
+
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        let historyStr = messages.map((m: any) => `${m.direction === 'incoming' ? 'Cliente' : 'Agente IA'}: ${m.content}`).join('\n');
+        const prompt = `${agent.systemPrompt}\n\nHistórico:\n${historyStr}\n\nAgente IA (responda de forma concisa e amigável):`;
+
+        const modelToUse = agent.model === 'gemini-2.5-pro' ? 'gemini-2.5-flash' : (agent.model || 'gemini-2.5-flash');
+
+        try {
+            let lastErr: any = null;
+            let replyText = 'Desculpe, não entendi.';
+            
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    const response = await ai.models.generateContent({
+                        model: modelToUse,
+                        contents: prompt
+                    });
+                    replyText = response.text || 'Desculpe, não entendi.';
+                    lastErr = null;
+                    break; // Sucesso
+                } catch (err: any) {
+                    lastErr = err;
+                    console.warn(`[Atendimento] Tentativa ${attempt} falhou no Gemini. Esperando antes de tentar novamente...`);
+                    if (attempt < 3) {
+                        await new Promise(res => setTimeout(res, 2000 * attempt)); // Exponential-ish backoff
+                    }
+                }
+            }
+
+            if (lastErr) {
+                throw lastErr;
+            }
+
+            const messageId = uuidv4();
+            const now = new Date().toISOString();
+
+            await db.run(
+                'INSERT INTO Messages (id, conversationId, direction, content, createdAt) VALUES (?, ?, ?, ?, ?)',
+                [messageId, conversationId, 'outgoing', replyText, now]
+            );
+            
+            await db.run('UPDATE Conversations SET updatedAt = ? WHERE id = ?', [now, conversationId]);
+
+            // Enviar de volta pela Evolution API se configurada
+            if (process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE) {
+                const ct = await db.get('SELECT phone FROM Contacts WHERE id = ?', [conv.contactId]);
+                if (ct) {
+                    try {
+                        await fetch(`${process.env.EVOLUTION_API_URL}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'apikey': process.env.EVOLUTION_API_KEY
+                            },
+                            body: JSON.stringify({
+                                number: ct.phone,
+                                text: replyText
+                            })
+                        });
+                    } catch (evoErr) {
+                        console.error('[Atendimento] Erro ao enviar para Evolution:', evoErr);
+                    }
+                }
+            }
+
+            if (ioInstance) {
+                ioInstance.emit('atendimento_new_message', {
+                    conversationId,
+                    message: { id: messageId, direction: 'outgoing', content: replyText, createdAt: now }
+                });
+                ioInstance.emit('atendimento_conversation_update', { conversationId, updatedAt: now });
+            }
+        } catch (genErr: any) {
+            console.error('[Atendimento] Erro na requisição do Gemini:', genErr);
+            
+            const errorMessage = `[Sistema] Erro no Agente IA: ${genErr.message || 'Falha ao processar.'}`;
+            const messageId = uuidv4();
+            const now = new Date().toISOString();
+
+            await db.run(
+                'INSERT INTO Messages (id, conversationId, direction, content, createdAt) VALUES (?, ?, ?, ?, ?)',
+                [messageId, conversationId, 'internal_note', errorMessage, now]
+            );
+            
+            if (ioInstance) {
+                ioInstance.emit('atendimento_new_message', {
+                    conversationId,
+                    message: { id: messageId, direction: 'internal_note', content: errorMessage, createdAt: now }
+                });
+            }
+        }
+        
+    } catch(err) {
+        console.error('[Atendimento] Erro Geral IA Processing:', err);
+    }
+};
+
+const handleCustomerMessage = (conversationId: string) => {
+    if (aiDebounceMap.has(conversationId)) {
+        clearTimeout(aiDebounceMap.get(conversationId)!);
+    }
+    const timer = setTimeout(() => {
+        aiDebounceMap.delete(conversationId);
+        triggerAIProcessing(conversationId);
+    }, 5000);
+    aiDebounceMap.set(conversationId, timer);
+};
+
+// --- Webhook (Suporta MOCK e EVOLUTION API) ---
+router.post('/webhook', async (req, res) => {
+    try {
+        console.log('[Atendimento] /webhook CHAMADO! Evento:', req.body?.event);
+        console.log('[Atendimento] Payload completo:', JSON.stringify(req.body, null, 2));
+        let contactName = '';
+        let contactPhone = '';
+        let channel = 'whatsapp';
+        let content = '';
+        let isOutgoing = false;
+
+        // Detecta se é o payload da Evolution API
+        if (req.body.event === 'messages.upsert') {
+            const msg = req.body.data.message;
+            if (!msg) {
+                 return res.json({ success: true, ignored: true });
+            }
+            
+            // Tratamento robusto para extrair texto de diferentes tipos de mensagens da Evolution API
+            if (msg.conversation) {
+                 content = msg.conversation;
+            } else if (msg.extendedTextMessage?.text) {
+                 content = msg.extendedTextMessage.text;
+            } else if (msg.imageMessage?.caption !== undefined) {
+                 content = msg.imageMessage.caption || '[Imagem]';
+            } else if (msg.videoMessage?.caption !== undefined) {
+                 content = msg.videoMessage.caption || '[Vídeo]';
+            } else if (msg.documentMessage?.caption !== undefined) {
+                 content = msg.documentMessage.caption || '[Documento]';
+            } else if (msg.audioMessage) {
+                 content = '[Áudio]';
+            } else if (msg.stickerMessage) {
+                 content = '[Figurinha]';
+            } else if (msg.locationMessage) {
+                 content = '[Localização]';
+            } else if (msg.buttonsResponseMessage?.selectedDisplayText) {
+                 content = msg.buttonsResponseMessage.selectedDisplayText;
+            } else if (msg.listResponseMessage?.singleSelectReply?.selectedRowId) {
+                 content = msg.listResponseMessage.title || '[Item de Lista]';
+            } else if (msg.templateButtonReplyMessage?.selectedId) {
+                 content = msg.templateButtonReplyMessage.selectedId;
+            } else {
+                 content = '[Mensagem de mídia/Desconhecida]';
+            }
+            
+            // Pega o número limpo
+            contactPhone = req.body.data.key.remoteJid.split('@')[0];
+            // Se a mensagem for do próprio bot/usuário (fromMe)
+            isOutgoing = !!req.body.data.key.fromMe;
+            
+            contactName = req.body.data.pushName || contactPhone;
+        } else {
+            // Mock payload
+            contactName = req.body.contactName;
+            contactPhone = req.body.contactPhone;
+            channel = req.body.channel || 'whatsapp';
+            content = req.body.content;
+            isOutgoing = req.body.direction === 'outgoing';
+        }
+
+        if (!contactPhone || !content) {
+            return res.status(400).json({ error: 'Payload inválido ou sem conteúdo' });
+        }
+
+        const db = await getDB();
+        
+        let contact = await db.get('SELECT * FROM Contacts WHERE phone = ?', [contactPhone]);
+        
+        const now = new Date().toISOString();
+        if (!contact) {
+            const contactId = uuidv4();
+            await db.run('INSERT INTO Contacts (id, name, phone, createdAt) VALUES (?, ?, ?, ?)', 
+                [contactId, contactName, contactPhone, now]);
+            contact = { id: contactId, name: contactName, phone: contactPhone };
+            if (ioInstance) ioInstance.emit('atendimento_new_contact', contact);
+        }
+
+        let conv = await db.get(`SELECT * FROM Conversations WHERE contactId = ? AND status IN ('open', 'pending', 'waiting_customer')`, [contact.id]);
+        
+        if (!conv) {
+            const convId = uuidv4();
+            await db.run(
+                'INSERT INTO Conversations (id, contactId, channel, status, aiEnabled, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)', 
+                [convId, contact.id, channel, 'open', 1, now, now]
+            );
+            conv = { id: convId, contactId: contact.id, channel: channel };
+            if (ioInstance) ioInstance.emit('atendimento_new_conversation', conv);
+        } else {
+            await db.run('UPDATE Conversations SET updatedAt = ? WHERE id = ?', [now, conv.id]);
+        }
+
+        const messageId = uuidv4();
+        const directionToSave = isOutgoing ? 'outgoing' : 'incoming';
+        
+        await db.run(
+            'INSERT INTO Messages (id, conversationId, direction, content, createdAt) VALUES (?, ?, ?, ?, ?)',
+            [messageId, conv.id, directionToSave, content, now]
+        );
+
+        if (ioInstance) {
+            ioInstance.emit('atendimento_new_message', {
+                conversationId: conv.id,
+                message: { id: messageId, direction: directionToSave, content, createdAt: now }
+            });
+            ioInstance.emit('atendimento_conversation_update', { conversationId: conv.id, updatedAt: now });
+        }
+
+        // Apenas processa inteligência artificial (Gemini) se a mensagem for de vinda do cliente (não é outgoing)
+        if (!isOutgoing) {
+            handleCustomerMessage(conv.id);
+        }
+
+        res.json({ success: true });
+    } catch(err: any) {
+        console.error('[Atendimento] Webhook Error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- API Geral ---
+
+// Obter Conversas Ativas
+router.get('/conversations', async (req, res) => {
+    try {
+        const db = await getDB();
+        const convs = await db.all(`
+            SELECT c.*, ct.name as contactName, ct.phone as contactPhone, ct.city as contactCity, ct.tags as contactTags 
+            FROM Conversations c 
+            JOIN Contacts ct ON c.contactId = ct.id 
+            ORDER BY c.updatedAt DESC
+        `);
+        res.json(convs);
+    } catch(err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Obter Mensagens de uma Conversa
+router.get('/conversations/:id/messages', async (req, res) => {
+    try {
+        const db = await getDB();
+        const messages = await db.all('SELECT * FROM Messages WHERE conversationId = ? ORDER BY createdAt ASC', [req.params.id]);
+        res.json(messages);
+    } catch(err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Enviar Mensagem (Humano)
+router.post('/conversations/:id/messages', async (req, res) => {
+    try {
+        const { content } = req.body;
+        const convId = req.params.id;
+        const db = await getDB();
+        
+        // Se humano responde, desativa a IA (Human Handoff)
+        await db.run('UPDATE Conversations SET aiEnabled = 0, updatedAt = ? WHERE id = ?', [new Date().toISOString(), convId]);
+        
+        const messageId = uuidv4();
+        const now = new Date().toISOString();
+        await db.run(
+            'INSERT INTO Messages (id, conversationId, direction, content, createdAt) VALUES (?, ?, ?, ?, ?)',
+            [messageId, convId, 'outgoing', content, now]
+        );
+
+        // Enviar para a Evolution API
+        if (process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE) {
+            const conv = await db.get('SELECT contactId FROM Conversations WHERE id = ?', [convId]);
+            if (conv) {
+                const ct = await db.get('SELECT phone FROM Contacts WHERE id = ?', [conv.contactId]);
+                if (ct) {
+                    try {
+                        await fetch(`${process.env.EVOLUTION_API_URL}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'apikey': process.env.EVOLUTION_API_KEY
+                            },
+                            body: JSON.stringify({
+                                number: ct.phone,
+                                text: content
+                            })
+                        });
+                    } catch (evoErr) {
+                        console.error('[Atendimento] Erro ao enviar para Evolution (Humano):', evoErr);
+                    }
+                }
+            }
+        }
+
+        if (ioInstance) {
+            ioInstance.emit('atendimento_new_message', {
+                conversationId: convId,
+                message: { id: messageId, direction: 'outgoing', content, createdAt: now }
+            });
+            ioInstance.emit('atendimento_conversation_update', { conversationId: convId, updatedAt: now, aiEnabled: 0 });
+        }
+
+        res.json({ success: true, messageId });
+    } catch(err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Atualizar Conversa (Ex: Transferência, Ativar IA)
+router.patch('/conversations/:id', async (req, res) => {
+    try {
+        const { aiEnabled, status, queue } = req.body;
+        const convId = req.params.id;
+        const db = await getDB();
+        
+        let updates = [];
+        let values = [];
+        if (aiEnabled !== undefined) {
+             updates.push('aiEnabled = ?'); values.push(aiEnabled);
+        }
+        if (status !== undefined) {
+             updates.push('status = ?'); values.push(status);
+        }
+        if (queue !== undefined) {
+             updates.push('queue = ?'); values.push(queue);
+        }
+        
+        if (updates.length > 0) {
+            updates.push('updatedAt = ?'); values.push(new Date().toISOString());
+            values.push(convId);
+            await db.run(`UPDATE Conversations SET ${updates.join(', ')} WHERE id = ?`, values);
+            
+            if (ioInstance) {
+                ioInstance.emit('atendimento_conversation_update', { conversationId: convId, aiEnabled, status, queue, updatedAt: new Date().toISOString() });
+            }
+        }
+        
+        res.json({ success: true });
+    } catch(err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Obter Agentes
+router.get('/agents', async (req, res) => {
+    try {
+        const db = await getDB();
+        const agents = await db.all('SELECT * FROM AgentSessions ORDER BY isDefault DESC');
+        res.json(agents);
+    } catch(err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Atualizar Agente
+router.put('/agents/:id', async (req, res) => {
+    try {
+        const { systemPrompt, model, name, active, isDefault } = req.body;
+        const agentId = req.params.id;
+        const db = await getDB();
+        
+        let updates = [];
+        let values = [];
+        if (systemPrompt !== undefined) { updates.push('systemPrompt = ?'); values.push(systemPrompt); }
+        if (model !== undefined) { updates.push('model = ?'); values.push(model); }
+        if (name !== undefined) { updates.push('name = ?'); values.push(name); }
+        if (active !== undefined) { updates.push('active = ?'); values.push(active); }
+        if (isDefault !== undefined) { updates.push('isDefault = ?'); values.push(isDefault); }
+        
+        if (updates.length > 0) {
+            values.push(agentId);
+            await db.run(`UPDATE AgentSessions SET ${updates.join(', ')} WHERE id = ?`, values);
+        }
+        
+        res.json({ success: true });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+export default router;

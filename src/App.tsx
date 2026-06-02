@@ -54,6 +54,7 @@ import SimuladorMCMV from './components/SimuladorMCMV';
 import ImoveisInteressados from './components/ImoveisInteressados';
 import PrivacyPolicyModal from './components/PrivacyPolicyModal';
 import TermsOfUseModal from './components/TermsOfUseModal';
+import AtendimentoPlatform from './components/atendimento/AtendimentoPlatform';
 
 import ControleClientes from './components/ControleClientes';
 
@@ -176,12 +177,14 @@ const PropertyGallery = ({ images, status }: { images?: string[], status: string
   );
 };
 
+import PublicProperties from './components/PublicProperties';
+
 export default function App() {
   const [user, setUser] = useState<any>(null);
   const [token, setToken] = useState<string>('');
   const [view, setView] = useState('dashboard');
   const [data, setData] = useState<any>({ clients: [], properties: [], contracts: [], staff: [], updateLogs: [] });
-  const [isSidebarOpen, setSidebarOpen] = useState(true);
+  const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [isEditingClient, setIsEditingClient] = useState(false);
   const [clientEditForm, setClientEditForm] = useState({ nome: '', telefone: '', email: '' });
@@ -767,6 +770,8 @@ export default function App() {
             </div>
           </section>
 
+          <PublicProperties />
+
           {/* SERVIÇOS SECTION */}
           <section className="py-20 px-4 bg-gray-50 border-y border-gray-200">
             <div className="max-w-6xl mx-auto">
@@ -971,8 +976,13 @@ export default function App() {
     );
   }
 
+  const handleNavClick = (v: string) => {
+    setView(v);
+    if (window.innerWidth < 768) setSidebarOpen(false);
+  };
+
   const Sidebar = () => (
-    <aside className={`bg-[#1d2d3d] text-gray-300 w-64 fixed h-full flex flex-col overflow-y-auto transition-all duration-300 z-50 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
+    <aside className={`bg-[#1d2d3d] text-gray-300 w-64 md:w-64 fixed h-full flex flex-col overflow-y-auto transition-transform duration-300 z-50 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
       <div className="p-6 border-b border-gray-700 flex flex-col items-center shrink-0">
         <div className="w-16 h-16 bg-white rounded-full mb-3 flex items-center justify-center overflow-hidden border-2 border-blue-400">
            <img src="/logo-ss-imoveis.webp" alt="SS Imóveis" />
@@ -982,7 +992,7 @@ export default function App() {
       </div>
       
       <nav className="mt-4 px-2 space-y-1 mb-8">
-        <button onClick={() => setView('dashboard')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'dashboard' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
+        <button onClick={() => handleNavClick('dashboard')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'dashboard' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
           <span className="mr-3">{ICONS.dashboard}</span>
           <span className="text-sm font-medium">Dashboard</span>
         </button>
@@ -990,26 +1000,26 @@ export default function App() {
         {user.role !== 'CLIENTE' && (
           <>
             {(user.role === 'ADMINISTRATIVO' || user.role === 'ADMINISTRADOR' || user.role === 'CORRETOR_ATENDIMENTO') && (
-              <button onClick={() => setView('clients')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'clients' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
+              <button onClick={() => handleNavClick('clients')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'clients' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
                 <span className="mr-3">{ICONS.clients}</span>
                 <span className="text-sm font-medium">Clientes</span>
               </button>
             )}
             
-            <button onClick={() => setView('properties')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'properties' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
+            <button onClick={() => handleNavClick('properties')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'properties' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
               <span className="mr-3">{ICONS.properties}</span>
               <span className="text-sm font-medium">Imóveis</span>
             </button>
             
             {(user.role === 'ADMINISTRATIVO' || user.role === 'ADMINISTRADOR' || user.role === 'FINANCEIRO_ATENDIMENTO' || user.role === 'CORRETOR_ATENDIMENTO') && (
-              <button onClick={() => setView('contracts')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'contracts' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
+              <button onClick={() => handleNavClick('contracts')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'contracts' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
                 <span className="mr-3">{ICONS.contracts}</span>
                 <span className="text-sm font-medium">Vendas / Contratos</span>
               </button>
             )}
 
             {(user.role === 'ADMINISTRATIVO' || user.role === 'ADMINISTRADOR' || user.role === 'CORRETOR_ATENDIMENTO') && (
-              <button onClick={() => setView('imoveis-interessados')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'imoveis-interessados' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
+              <button onClick={() => handleNavClick('imoveis-interessados')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'imoveis-interessados' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
                 <span className="mr-3"><UserCheck size={20} /></span>
                 <span className="text-sm font-medium">Imóveis Interessados</span>
               </button>
@@ -1017,33 +1027,40 @@ export default function App() {
 
             {(user.role === 'ADMINISTRATIVO' || user.role === 'ADMINISTRADOR') && (
               <>
-                <button onClick={() => setView('estoque')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'estoque' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
+                <button onClick={() => handleNavClick('estoque')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'estoque' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
                   <span className="mr-3"><PackageSearch size={20} /></span>
                   <span className="text-sm font-medium">Controle de Estoque</span>
                 </button>
-                <button onClick={() => setView('controle-clientes')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'controle-clientes' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
+                <button onClick={() => handleNavClick('controle-clientes')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'controle-clientes' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
                   <span className="mr-3"><MapPin size={20} /></span>
                   <span className="text-sm font-medium">Controle da Supervisão</span>
                 </button>
               </>
             )}
 
+            {(user.role === 'ADMINISTRATIVO' || user.role === 'ADMINISTRADOR' || user.role === 'CORRETOR_ATENDIMENTO') && (
+               <button onClick={() => handleNavClick('atendimento')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'atendimento' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
+                  <span className="mr-3"><MessageSquare size={20} /></span>
+                  <span className="text-sm font-medium">Central de Atendimento</span>
+               </button>
+            )}
+
             {user.role === 'CORRETOR_ATENDIMENTO' && (
-               <button onClick={() => setView('minhas-comissoes')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'minhas-comissoes' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
+               <button onClick={() => handleNavClick('minhas-comissoes')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'minhas-comissoes' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
                   <span className="mr-3"><Activity size={20} /></span>
                   <span className="text-sm font-medium">Minhas Comissões</span>
                </button>
             )}
 
             {(user.role === 'ADMINISTRATIVO' || user.role === 'ADMINISTRADOR' || user.role === 'CORRETOR_ATENDIMENTO') && (
-               <button onClick={() => setView('simulador-mcmv')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'simulador-mcmv' ? 'bg-orange-500 text-white shadow-md' : 'hover:bg-gray-800'}`}>
+               <button onClick={() => handleNavClick('simulador-mcmv')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'simulador-mcmv' ? 'bg-orange-500 text-white shadow-md' : 'hover:bg-gray-800'}`}>
                   <span className="mr-3"><Calculator size={20} /></span>
                   <span className="text-sm font-medium">Simulador MCMV</span>
                </button>
             )}
 
             {(user.role === 'ADMINISTRATIVO' || user.role === 'ADMINISTRADOR' || user.role === 'FINANCEIRO_ATENDIMENTO') && (
-               <button onClick={() => setView('admin-comissoes')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'admin-comissoes' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
+               <button onClick={() => handleNavClick('admin-comissoes')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'admin-comissoes' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
                   <span className="mr-3"><Activity size={20} /></span>
                   <span className="text-sm font-medium">Painel de Comissões</span>
                </button>
@@ -1053,7 +1070,7 @@ export default function App() {
         
         {(user.role === 'ADMINISTRATIVO' || user.role === 'ADMINISTRADOR') && (
           <>
-            <button onClick={() => setView('staff')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'staff' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
+            <button onClick={() => handleNavClick('staff')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'staff' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
               <span className="mr-3">{ICONS.staff}</span>
               <span className="text-sm font-medium">Gestão de Equipe</span>
             </button>
@@ -1164,9 +1181,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex">
+      {/* Mobile Backdrop Overlay */}
+      {isSidebarOpen && (
+         <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
       <Sidebar />
       
-      <main className={`flex-1 transition-all duration-300 ${isSidebarOpen ? 'ml-0 md:ml-64' : 'ml-0'}`}>
+      <main className="flex-1 transition-all duration-300 ml-0 md:ml-64">
         {/* Topbar */}
         <header className="bg-white h-16 border-b border-gray-200 flex items-center justify-between px-6 sticky top-0 z-40">
           <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="md:hidden text-gray-500">
@@ -1969,8 +1990,11 @@ export default function App() {
               </motion.div>
             )}
 
-
-
+            {view === 'atendimento' && (
+              <motion.div key="atendimento" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full">
+                <AtendimentoPlatform user={user} />
+              </motion.div>
+            )}
 
           </AnimatePresence>
 
@@ -1991,14 +2015,14 @@ export default function App() {
                   initial={{ opacity: 0, scale: 0.9, y: 20 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                  className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-2xl shadow-2xl z-[201] overflow-hidden"
+                  className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-md bg-white rounded-2xl shadow-2xl z-[201] overflow-hidden max-h-[90vh] flex flex-col"
                 >
-                  <div className="bg-blue-600 p-6 text-white">
+                  <div className="bg-blue-600 p-6 text-white shrink-0">
                     <h2 className="text-xl font-bold uppercase tracking-tight">{propertyForm.id ? `Editar Imóvel #${propertyForm.id}` : 'Novo Imóvel'}</h2>
                     <p className="text-xs opacity-80 uppercase tracking-widest">{propertyForm.id ? 'Atualização de Ativo Imobiliário' : 'Cadastro de Ativo Imobiliário'}</p>
                   </div>
 
-                  <form className="p-6 space-y-4" onSubmit={async (e) => {
+                  <form className="p-6 space-y-4 overflow-y-auto flex-1 focus:outline-none" onSubmit={async (e) => {
                     e.preventDefault();
                     try {
                       const form = e.target as any;

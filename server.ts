@@ -2,6 +2,9 @@ import express from 'express';
 import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
+
+// Configuração para permitir certificados autoassinados da Evolution API
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 import http from 'http';
 import fs from 'fs';
 import { Server } from 'socket.io';
@@ -13,9 +16,11 @@ import sharp from 'sharp';
 import { createServer as createViteServer } from 'vite';
 import nodemailer from 'nodemailer';
 import { handleSimulacaoMCMV } from './src/lib/simuladorMCMV.ts';
+import atendimentoRouter, { setSocketIo } from './src/lib/atendimento-router.ts';
 
 let transporter: nodemailer.Transporter | null = null;
 async function getTransporter() {
+
   if (transporter) return transporter;
   transporter = nodemailer.createTransport({
       host: 'smtp-relay.brevo.com',
@@ -126,6 +131,8 @@ async function startServer() {
   }));
 
   app.use(express.json());
+  
+  app.use('/api/atendimento', atendimentoRouter);
 
   // Socket.io Setup
   const io = new Server(server, {
@@ -136,6 +143,8 @@ async function startServer() {
     },
     maxHttpBufferSize: 5e7 // 50MB
   });
+  
+  setSocketIo(io);
 
 
 
@@ -941,6 +950,22 @@ async function startServer() {
   let movementIdCounter = 1;
 
 
+
+  app.get('/api/public-properties', async (req, res) => {
+    try {
+      const { data: properties, error } = await supabaseServer.from('properties')
+        .select('*')
+        .eq('status', 'DISPONÍVEL');
+      if (error) {
+        throw error;
+      }
+      const mapped = (properties || []).map(p => sanitizeProperty(p));
+      res.json(mapped);
+    } catch (e: any) {
+      console.error('[Public Properties Error]:', e);
+      res.status(500).json({ error: e.message || 'Erro ao carregar imóveis' });
+    }
+  });
 
   app.get('/api/data', async (req, res) => {
     try {
