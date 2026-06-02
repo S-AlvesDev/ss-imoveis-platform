@@ -205,29 +205,82 @@ router.post('/webhook', async (req, res) => {
             payload: rawPayload
         });
 
-        // 2. Extração Flexível (Evo GO, Evolution API, ou Mock)
-        
+        // Só processar mensagens novas
+        if (eventName && eventName !== 'messages.upsert' && eventName !== 'mock' && eventName !== 'webhook_recebido') {
+             addWebhookLog({
+                 timestamp: new Date().toISOString(),
+                 event: eventName,
+                 sender: rawPayload?.data?.key?.remoteJid?.split('@')[0] || rawPayload?.data?.remoteJid?.split('@')[0] || rawPayload?.sender || 'Sistema/Status',
+                 content: `Ignorado: Evento de status (${eventName})`,
+                 direction: isOutgoing ? 'outgoing' : 'incoming',
+                 success: true,
+                 payload: rawPayload
+             });
+             return res.status(200).json({ success: true, message: 'Evento ignorado pois não é uma nova mensagem.' });
+        }
+
         // Pega a mensagem base ( Evolution API v1 ou v2 ou array )
         let mainMsgObj = rawPayload?.data?.message || rawPayload?.data?.messages?.[0] || rawPayload?.data || rawPayload;
 
-        // Tenta capturar o número do remetente (contactPhone)
-        if (mainMsgObj?.key?.remoteJid) {
-            contactPhone = mainMsgObj.key.remoteJid.split('@')[0];
-        } else if (mainMsgObj?.remoteJid) {
-            contactPhone = mainMsgObj.remoteJid.split('@')[0];
-        } else if (rawPayload?.data?.Sender) { // Evol formato novo lid
-            contactPhone = String(rawPayload.data.Sender).split('@')[0];
-        } else if (rawPayload?.sender) {
-            contactPhone = String(rawPayload.sender).replace(/[^0-9]/g, '');
-        } else if (rawPayload?.contactPhone) {
-            contactPhone = rawPayload.contactPhone;
-        } else if (rawPayload?.phone) {
-            contactPhone = String(rawPayload.phone).replace(/[^0-9]/g, '');
+        // Tenta capturar o número do remetente (contactPhone) priorizando @s.whatsapp.net
+        let potentialPhones = [
+            mainMsgObj?.key?.remoteJid,
+            mainMsgObj?.remoteJid,
+            rawPayload?.data?.key?.remoteJid,
+            rawPayload?.data?.Sender,
+            rawPayload?.sender,
+            rawPayload?.phone,
+            rawPayload?.contactPhone
+        ];
+
+        for (let p of potentialPhones) {
+            if (p && typeof p === 'string' && p.includes('@s.whatsapp.net') && !p.includes(':')) {
+                contactPhone = p.split('@')[0];
+                break;
+            }
+        }
+        
+        if (!contactPhone) {
+            // Tenta pegar com : e limpar
+             for (let p of potentialPhones) {
+                if (p && typeof p === 'string' && p.includes('@s.whatsapp.net')) {
+                    contactPhone = p.split('@')[0].split(':')[0];
+                    break;
+                }
+            }
         }
 
-        // Remove do telefone o sufixo :XXXX que às vezes vem com @s.whatsapp.net (ex: 5511999999999:12@s.whatsapp.net)
-        if (contactPhone && contactPhone.includes(':')) {
-            contactPhone = contactPhone.split(':')[0];
+        if (!contactPhone) {
+            // Em ultimo caso pega qualquer coisa
+            for (let p of potentialPhones) {
+                if (p && typeof p === 'string') {
+                    let clean = p.split('@')[0].replace(/[^0-9]/g, '');
+                    if (clean.length > 5) {
+                        contactPhone = clean;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Ignora mensagens de grupo ou broadcast
+        const remoteJidForGroup = mainMsgObj?.key?.remoteJid || mainMsgObj?.remoteJid || rawPayload?.data?.Sender || '';
+        if (typeof remoteJidForGroup === 'string' && (remoteJidForGroup.includes('@g.us') || remoteJidForGroup.includes('@broadcast') || remoteJidForGroup.includes('status@broadcast'))) {
+            addWebhookLog({
+                timestamp: new Date().toISOString(),
+                event: eventName,
+                sender: String(remoteJidForGroup).split('@')[0],
+                content: 'Ignorado: Evento de grupo ou status',
+                direction: 'incoming',
+                success: true,
+                payload: rawPayload
+            });
+            return res.status(200).json({ success: true, message: 'Ignorado (grupo/broadcast).' });
+        }
+
+        // Adiciona sinal de "+" se não tiver (ex: +5584991284470)
+        if (contactPhone && !contactPhone.startsWith('+')) {
+            contactPhone = '+' + contactPhone;
         }
 
         // Tenta extrair o nome
@@ -238,57 +291,80 @@ router.post('/webhook', async (req, res) => {
 
         // Tenta extrair a mensagem de texto
         const msg = mainMsgObj?.message || mainMsgObj;
+        
         if (msg) {
+             // Evolution messages
              if (msg.conversation) {
                   content = msg.conversation;
              } else if (msg.extendedTextMessage?.text) {
                   content = msg.extendedTextMessage.text;
-             } else if (msg.imageMessage?.caption !== undefined) {
+             } else if (msg.imageMessage) {
                   content = msg.imageMessage.caption || '[Imagem]';
-             } else if (msg.videoMessage?.caption !== undefined) {
+             } else if (msg.videoMessage) {
                   content = msg.videoMessage.caption || '[Vídeo]';
-             } else if (msg.documentMessage?.caption !== undefined) {
-                  content = msg.documentMessage.caption || '[Documento]';
-             } else if (msg.audioMessage) {
+             } else if (msg.documentMessage) {
+                  content = msg.documentMessage.caption || msg.documentMessage.fileName || '[Documento]';
+             } else if (msg.audioMessage || msg.pttMessage) {
                   content = '[Áudio]';
              } else if (msg.stickerMessage) {
                   content = '[Figurinha]';
              } else if (msg.locationMessage) {
                   content = '[Localização]';
+             } else if (msg.contactMessage) {
+                  content = '[Contato]';
+             } else if (msg.reactionMessage) {
+                  content = `[Reação: ${msg.reactionMessage?.text || msg.reactionMessage?.reaction || '👍'}]`;
              } else if (msg.buttonsResponseMessage?.selectedDisplayText) {
                   content = msg.buttonsResponseMessage.selectedDisplayText;
-             } else if (msg.listResponseMessage?.singleSelectReply?.selectedRowId) {
-                  content = msg.listResponseMessage.title || '[Item de Lista]';
+             } else if (msg.listResponseMessage?.title || msg.listResponseMessage?.singleSelectReply?.selectedRowId) {
+                  content = msg.listResponseMessage?.title || '[Item de Lista]';
              } else if (msg.templateButtonReplyMessage?.selectedId) {
                   content = msg.templateButtonReplyMessage.selectedId;
              } else if (typeof msg === 'string') {
                   content = msg;
              } else if (msg.text) {
                   content = msg.text;
-             } else {
-                  content = '[Objeto Mídia]';
+             } else if (msg.caption) {
+                  content = msg.caption;
+             } else if (msg.body) {
+                  content = msg.body;
              }
-        } else if (rawPayload?.text || rawPayload?.body) {
-             content = rawPayload.text || rawPayload.body;
-        } else if (rawPayload?.content) {
-             content = rawPayload.content;
-        } else if (rawPayload?.data?.text || rawPayload?.data?.body) {
-             content = rawPayload.data.text || rawPayload.data.body;
+        } 
+        
+        if (!content) {
+             if (rawPayload?.text || rawPayload?.body) {
+                 content = rawPayload.text || rawPayload.body;
+             } else if (rawPayload?.content) {
+                 content = rawPayload.content;
+             } else if (rawPayload?.data?.text || rawPayload?.data?.body) {
+                 content = rawPayload.data.text || rawPayload.data.body;
+             }
+        }
+        
+        // Verifica event type vindo customizado para fallback (Evolution wrapper ou Chatwoot wrapper)
+        const messageType = mainMsgObj?.messageType || rawPayload?.data?.messageType;
+        if (!content && messageType) {
+            if (messageType.includes('image')) content = '[Imagem]';
+            else if (messageType.includes('video')) content = '[Vídeo]';
+            else if (messageType.includes('audio')) content = '[Áudio]';
+            else if (messageType.includes('sticker')) content = '[Figurinha]';
+            else if (messageType.includes('document')) content = '[Documento]';
+            else if (messageType.includes('location')) content = '[Localização]';
+            else if (messageType.includes('contact')) content = '[Contato]';
         }
 
-        // Se não achou telefone ou conteúdo, trata como evento de status (Receipt, Presence, etc.)
-        if (!contactPhone || !content) {
+        // Se não achou telefone ou a mensagem não tem conteúdo decifrável textual
+        if (!contactPhone || !content || content === '[Objeto Mídia]') {
             addWebhookLog({
                 timestamp: new Date().toISOString(),
                 event: eventName,
                 sender: contactPhone || 'Sistema/Status',
-                content: 'Ignorado: Evento de status ou requisição sem mensagem',
+                content: 'Ignorado: Evento de status ou sem metadados suficientes',
                 direction: isOutgoing ? 'outgoing' : 'incoming',
-                success: true, // success true para não acusar erro na interface, é só um aviso estrutural
+                success: true,
                 payload: rawPayload
             });
-            // Retorna 200 OK para a Evolution API não ficar repetindo a entrega
-            return res.status(200).json({ success: true, message: 'Evento ignorado pois não é uma mensagem de chat.' });
+            return res.status(200).json({ success: true, message: 'Evento ignorado sem mensagem de chat clara.' });
         }
 
         const db = await getDB();
