@@ -1,4 +1,6 @@
-import express from 'express';
+const fs = require('fs');
+
+const fileContent = `import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { Server } from 'socket.io';
 import { GoogleGenAI } from '@google/genai';
@@ -29,8 +31,8 @@ const triggerAIProcessing = async (conversationId) => {
         }
 
         const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        let historyStr = (messages || []).map((m) => `${m.direction === 'incoming' ? 'Cliente' : 'Agente IA'}: ${m.content}`).join('\n');
-        const prompt = `${agent.system_prompt}\n\nHistórico:\n${historyStr}\n\nAgente IA (responda de forma concisa e amigável):`;
+        let historyStr = (messages || []).map((m) => \`\${m.direction === 'incoming' ? 'Cliente' : 'Agente IA'}: \${m.content}\`).join('\\n');
+        const prompt = \`\${agent.system_prompt}\\n\\nHistórico:\\n\${historyStr}\\n\\nAgente IA (responda de forma concisa e amigável):\`;
 
         const modelToUse = agent.model === 'gemini-2.5-pro' ? 'gemini-2.5-flash' : (agent.model || 'gemini-2.5-flash');
 
@@ -49,7 +51,7 @@ const triggerAIProcessing = async (conversationId) => {
                     break;
                 } catch (err) {
                     lastErr = err;
-                    console.warn(`[Atendimento] Tentativa ${attempt} falhou no Gemini. Esperando antes de tentar novamente...`);
+                    console.warn(\`[Atendimento] Tentativa \${attempt} falhou no Gemini. Esperando antes de tentar novamente...\`);
                     if (attempt < 3) {
                         await new Promise(res => setTimeout(res, 2000 * attempt));
                     }
@@ -70,14 +72,14 @@ const triggerAIProcessing = async (conversationId) => {
                 const { data: ct } = await supabase.from('chat_contacts').select('phone').eq('id', conv.contact_id).maybeSingle();
                 if (ct) {
                     try {
-                        const baseUrl = process.env.EVOLUTION_API_URL.replace(/\/$/, '');
-                        const purePhone = ct.phone.replace(/\D/g, '');
-                        const resp = await fetch(`${baseUrl}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
+                        const baseUrl = process.env.EVOLUTION_API_URL.replace(/\\/$/, '');
+                        const purePhone = ct.phone.replace(/\\D/g, '');
+                        const resp = await fetch(\`\${baseUrl}/message/sendText/\${process.env.EVOLUTION_INSTANCE}\`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                                 'apikey': process.env.EVOLUTION_API_KEY,
-                                'Authorization': `Bearer ${process.env.EVOLUTION_API_KEY}`
+                                'Authorization': \`Bearer \${process.env.EVOLUTION_API_KEY}\`
                             },
                             body: JSON.stringify({
                                 number: purePhone,
@@ -106,11 +108,11 @@ const triggerAIProcessing = async (conversationId) => {
         } catch (genErr) {
             console.error('[Atendimento] Erro na requisição do Gemini:', genErr);
             
-            let errorMessage = `[Sistema] Erro no Agente IA: ${genErr.message || 'Falha ao processar.'}`;
+            let errorMessage = \`[Sistema] Erro no Agente IA: \${genErr.message || 'Falha ao processar.'}\`;
             let fallbackBotMessage = "";
 
             if (genErr?.status === 429 || String(genErr?.message).includes('429')) {
-                errorMessage = `[Sistema] Limite de IA atingido (Quota 429). Ativando modo bot estático.`;
+                errorMessage = \`[Sistema] Limite de IA atingido (Quota 429). Ativando modo bot estático.\`;
                 
                 const lastMsg = (messages && messages.length > 0) ? messages[messages.length - 1].content.trim() : '';
                 
@@ -127,7 +129,7 @@ const triggerAIProcessing = async (conversationId) => {
                      await supabase.from('chat_conversations').update({ queue: 'Administrativo', ai_enabled: false }).eq('id', conversationId);
                      if (ioInstance) ioInstance.emit('atendimento_conversation_update', { conversationId, queue: 'Administrativo', aiEnabled: 0 });
                  } else {
-                     fallbackBotMessage = "Olá! Ocorreu um limite no serviço de IA.\n\nQual departamento você deseja falar?\n\n1️⃣ - Corretores\n2️⃣ - Financeiro\n3️⃣ - Administrativo\n\n*Digite o número:*";
+                     fallbackBotMessage = "Olá! Ocorreu um limite no serviço de IA.\\n\\nQual departamento você deseja falar?\\n\\n1️⃣ - Corretores\\n2️⃣ - Financeiro\\n3️⃣ - Administrativo\\n\\n*Digite o número:*";
                  }
             } else {
                 await supabase.from('chat_conversations').update({ ai_enabled: false }).eq('id', conversationId);
@@ -160,14 +162,14 @@ const triggerAIProcessing = async (conversationId) => {
                         const { data: ct } = await supabase.from('chat_contacts').select('phone').eq('id', conv.contact_id).maybeSingle();
                         if (ct) {
                             try {
-                                const baseUrl = process.env.EVOLUTION_API_URL.replace(/\/$/, '');
-                                const purePhone = ct.phone.replace(/\D/g, '');
-                                fetch(`${baseUrl}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
+                                const baseUrl = process.env.EVOLUTION_API_URL.replace(/\\/$/, '');
+                                const purePhone = ct.phone.replace(/\\D/g, '');
+                                fetch(\`\${baseUrl}/message/sendText/\${process.env.EVOLUTION_INSTANCE}\`, {
                                     method: 'POST',
                                     headers: { 
                                         'Content-Type': 'application/json', 
                                         'apikey': process.env.EVOLUTION_API_KEY,
-                                        'Authorization': `Bearer ${process.env.EVOLUTION_API_KEY}`
+                                        'Authorization': \`Bearer \${process.env.EVOLUTION_API_KEY}\`
                                     },
                                     body: JSON.stringify({ 
                                         number: purePhone, 
@@ -246,7 +248,7 @@ router.post('/webhook', async (req, res) => {
 
         const lowerEvent = eventName?.toLowerCase() || '';
         if (lowerEvent && lowerEvent !== 'messages.upsert' && lowerEvent !== 'mock' && lowerEvent !== 'webhook_recebido' && lowerEvent !== 'message') {
-             addWebhookLog({ timestamp: new Date().toISOString(), event: eventName, sender: 'Sistema', content: `Ignorado: Evento de status (${eventName})`, direction: 'incoming', success: true, payload: rawPayload });
+             addWebhookLog({ timestamp: new Date().toISOString(), event: eventName, sender: 'Sistema', content: \`Ignorado: Evento de status (\${eventName})\`, direction: 'incoming', success: true, payload: rawPayload });
              return res.status(200).json({ success: true, message: 'Evento ignorado pois não é uma nova mensagem.' });
         }
 
@@ -290,11 +292,11 @@ router.post('/webhook', async (req, res) => {
         }
         if (!contactPhone) {
             const strPayload = typeof rawPayload === 'object' ? JSON.stringify(rawPayload) : String(rawPayload);
-            const match = strPayload.match(/["']?([^"'\s]+@s\.whatsapp\.net)["']?/);
+            const match = strPayload.match(/["']?([^"'\\s]+@s\\.whatsapp\\.net)["']?/);
             if (match && match[1]) {
                 contactPhone = match[1].split('@')[0].split(':')[0];
             } else {
-                const matchLid = strPayload.match(/["']?([^"'\s]+@lid)["']?/);
+                const matchLid = strPayload.match(/["']?([^"'\\s]+@lid)["']?/);
                 if (matchLid && matchLid[1]) contactPhone = matchLid[1].split('@')[0].split(':')[0];
             }
         }
@@ -336,7 +338,7 @@ router.post('/webhook', async (req, res) => {
              else if (msg.stickerMessage) content = '[Figurinha]';
              else if (msg.locationMessage) content = '[Localização]';
              else if (msg.contactMessage) content = '[Contato]';
-             else if (msg.reactionMessage) content = `[Reação: ${msg.reactionMessage?.text || msg.reactionMessage?.reaction || '👍'}]`;
+             else if (msg.reactionMessage) content = \`[Reação: \${msg.reactionMessage?.text || msg.reactionMessage?.reaction || '👍'}]\`;
              else if (msg.buttonsResponseMessage?.selectedDisplayText) content = msg.buttonsResponseMessage.selectedDisplayText;
              else if (msg.listResponseMessage?.title || msg.listResponseMessage?.singleSelectReply?.selectedRowId) content = msg.listResponseMessage?.title || '[Item de Lista]';
              else if (msg.templateButtonReplyMessage?.selectedId) content = msg.templateButtonReplyMessage.selectedId;
@@ -367,7 +369,7 @@ router.post('/webhook', async (req, res) => {
 
         if (!content) {
              const strPayload = typeof rawPayload === 'object' ? JSON.stringify(rawPayload) : String(rawPayload);
-             const convMatch = strPayload.match(/"conversation"\s*:\s*"([^"]+)"/i) || strPayload.match(/"text"\s*:\s*"([^"]+)"/i) || strPayload.match(/"body"\s*:\s*"([^"]+)"/i);
+             const convMatch = strPayload.match(/"conversation"\\s*:\\s*"([^"]+)"/i) || strPayload.match(/"text"\\s*:\\s*"([^"]+)"/i) || strPayload.match(/"body"\\s*:\\s*"([^"]+)"/i);
              if (convMatch && convMatch[1]) content = convMatch[1];
              else if (strPayload.match(/"imageMessage"/i)) content = '[Imagem]';
              else if (strPayload.match(/"videoMessage"/i)) content = '[Vídeo]';
@@ -454,7 +456,7 @@ router.post('/webhook', async (req, res) => {
             handleCustomerMessage(conv.id);
         }
 
-        addWebhookLog({ timestamp: now, event: eventName, sender: `${contactName} (${contactPhone})`, content: content, direction: directionToSave, success: true, payload: rawPayload });
+        addWebhookLog({ timestamp: now, event: eventName, sender: \`\${contactName} (\${contactPhone})\`, content: content, direction: directionToSave, success: true, payload: rawPayload });
         res.json({ success: true });
     } catch(err) {
         console.error('[Atendimento] Webhook Error:', err);
@@ -469,7 +471,7 @@ router.get('/conversations', async (req, res) => {
     try {
         const { data: convs, error } = await supabase
             .from('chat_conversations')
-            .select(`*, chat_contacts (*)`)
+            .select(\`*, chat_contacts (*)\`)
             .order('updated_at', { ascending: false });
             
         if (error) throw error;
@@ -527,14 +529,14 @@ router.post('/conversations/:id/messages', async (req, res) => {
                 const { data: ct } = await supabase.from('chat_contacts').select('phone').eq('id', conv.contact_id).maybeSingle();
                 if (ct) {
                     try {
-                        const baseUrl = process.env.EVOLUTION_API_URL.replace(/\/$/, '');
-                        const purePhone = ct.phone.replace(/\D/g, '');
-                        const resp = await fetch(`${baseUrl}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
+                        const baseUrl = process.env.EVOLUTION_API_URL.replace(/\\/$/, '');
+                        const purePhone = ct.phone.replace(/\\D/g, '');
+                        const resp = await fetch(\`\${baseUrl}/message/sendText/\${process.env.EVOLUTION_INSTANCE}\`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                                 'apikey': process.env.EVOLUTION_API_KEY,
-                                'Authorization': `Bearer ${process.env.EVOLUTION_API_KEY}`
+                                'Authorization': \`Bearer \${process.env.EVOLUTION_API_KEY}\`
                             },
                             body: JSON.stringify({
                                 number: purePhone,
@@ -631,3 +633,6 @@ router.put('/agents/:id', async (req, res) => {
 });
 
 export default router;
+`;
+
+fs.writeFileSync('src/lib/atendimento-router.ts', fileContent);

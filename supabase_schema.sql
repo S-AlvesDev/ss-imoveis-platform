@@ -128,3 +128,55 @@ ALTER TABLE public.contracts
 ALTER TABLE public.contracts ADD COLUMN IF NOT EXISTS corretor_matricula TEXT;
 */
 
+-- Tabelas para o Sistema de Atendimento (Chat Evolution/IA)
+
+CREATE TABLE IF NOT EXISTS public.chat_contacts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT,
+    phone TEXT,
+    email TEXT,
+    city TEXT,
+    tags TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.chat_conversations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    contact_id UUID REFERENCES public.chat_contacts(id) ON DELETE CASCADE,
+    channel TEXT,
+    status TEXT,
+    assigned_user_id TEXT,
+    assigned_agent_id TEXT,
+    ai_enabled BOOLEAN DEFAULT true,
+    queue TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.chat_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id UUID REFERENCES public.chat_conversations(id) ON DELETE CASCADE,
+    direction TEXT,
+    content TEXT,
+    metadata JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.chat_agent_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT,
+    system_prompt TEXT,
+    provider TEXT,
+    model TEXT,
+    tools TEXT,
+    is_default BOOLEAN DEFAULT false,
+    active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+-- Inserir agente inicial se não existir
+INSERT INTO public.chat_agent_sessions (name, system_prompt, provider, model, is_default, active)
+SELECT 'Recepcionista Padrão', 'Você é um assistente de imobiliária amigável. Identifique a intenção do cliente, responda dúvidas simples e encaminhe para o setor correto (Corretores, Financeiro, Administrativo).', 'google', 'gemini-2.5-flash', true, true
+WHERE NOT EXISTS (SELECT 1 FROM public.chat_agent_sessions WHERE is_default = true);
+
