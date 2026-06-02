@@ -70,7 +70,8 @@ const triggerAIProcessing = async (conversationId) => {
                 const { data: ct } = await supabase.from('chat_contacts').select('phone').eq('id', conv.contact_id).maybeSingle();
                 if (ct) {
                     try {
-                        const baseUrl = process.env.EVOLUTION_API_URL.replace(/\/$/, '');
+                        let baseUrl = process.env.EVOLUTION_API_URL.replace(/\/$/, '');
+                        if (!/^https?:\/\//i.test(baseUrl)) baseUrl = 'https://' + baseUrl;
                         const purePhone = ct.phone.replace(/\D/g, '');
                         const resp = await fetch(`${baseUrl}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
                             method: 'POST',
@@ -160,9 +161,10 @@ const triggerAIProcessing = async (conversationId) => {
                         const { data: ct } = await supabase.from('chat_contacts').select('phone').eq('id', conv.contact_id).maybeSingle();
                         if (ct) {
                             try {
-                                const baseUrl = process.env.EVOLUTION_API_URL.replace(/\/$/, '');
+                                let baseUrl = process.env.EVOLUTION_API_URL.replace(/\/$/, '');
+                                if (!/^https?:\/\//i.test(baseUrl)) baseUrl = 'https://' + baseUrl;
                                 const purePhone = ct.phone.replace(/\D/g, '');
-                                fetch(`${baseUrl}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
+                                await fetch(`${baseUrl}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
                                     method: 'POST',
                                     headers: { 
                                         'Content-Type': 'application/json', 
@@ -527,7 +529,8 @@ router.post('/conversations/:id/messages', async (req, res) => {
                 const { data: ct } = await supabase.from('chat_contacts').select('phone').eq('id', conv.contact_id).maybeSingle();
                 if (ct) {
                     try {
-                        const baseUrl = process.env.EVOLUTION_API_URL.replace(/\/$/, '');
+                        let baseUrl = process.env.EVOLUTION_API_URL.replace(/\/$/, '');
+                        if (!/^https?:\/\//i.test(baseUrl)) baseUrl = 'https://' + baseUrl;
                         const purePhone = ct.phone.replace(/\D/g, '');
                         const resp = await fetch(`${baseUrl}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
                             method: 'POST',
