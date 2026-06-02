@@ -572,7 +572,7 @@ router.patch('/conversations/:id', async (req, res) => {
         const { aiEnabled, status, queue } = req.body;
         const convId = req.params.id;
         
-        let updates = {};
+        let updates: Record<string, any> = {};
         if (aiEnabled !== undefined) updates.ai_enabled = aiEnabled;
         if (status !== undefined) updates.status = status;
         if (queue !== undefined) updates.queue = queue;
@@ -613,7 +613,7 @@ router.put('/agents/:id', async (req, res) => {
         const { systemPrompt, model, name, active, isDefault } = req.body;
         const agentId = req.params.id;
         
-        let updates = {};
+        let updates: Record<string, any> = {};
         if (systemPrompt !== undefined) updates.system_prompt = systemPrompt;
         if (model !== undefined) updates.model = model;
         if (name !== undefined) updates.name = name;
