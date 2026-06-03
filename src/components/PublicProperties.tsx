@@ -41,49 +41,22 @@ export default function PublicProperties() {
     document.getElementById('login-card')?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const extractTypeAndDesc = (prop: any) => {
-      let type = 'Outros';
-      let desc = prop.descricao || '';
-      let imgs: string[] = [];
-      
-      if (desc.includes('|||IMAGES:')) {
-          try {
-             imgs = JSON.parse(desc.split('|||IMAGES:')[1]);
-          } catch(e) {}
-      }
-      
-      if (desc.includes('|||TIPO:')) {
-         type = desc.split('|||TIPO:')[1].split('|||')[0];
-      } else {
-         const searchStr = (prop.nome + ' ' + desc).toLowerCase();
-         if (searchStr.includes('apartamento') || searchStr.includes('apto') || searchStr.includes('edifício')) {
-            type = 'Apartamento';
-         } else if (searchStr.includes('casa') || searchStr.includes('duplex') || searchStr.includes('mansão')) {
-            type = 'Casa';
-         } else if (searchStr.includes('terreno') || searchStr.includes('lote')) {
-            type = 'Terreno';
-         } else if (searchStr.includes('galpão') || searchStr.includes('comercial') || searchStr.includes('loja')) {
-             type = 'Comercial';
-         }
-      }
-      
-      if (desc.includes('|||')) {
-         desc = desc.split('|||')[0];
-      }
-      
-      return { type, desc, images: imgs };
+  const getNormalizedImage = (imageName: string) => {
+    if (!imageName) return '';
+    if (!imageName.includes('/') && !imageName.startsWith('http')) {
+      return `/assets/imoveis/${imageName}`;
+    }
+    return imageName;
   };
 
   const filteredProperties = properties.filter(p => {
     const term = searchTerm.toLowerCase();
     const matchesSearch = p.nome.toLowerCase().includes(term) || p.localizacao.toLowerCase().includes(term);
     
-    const { type } = extractTypeAndDesc(p);
-    
     // check simple logic (assuming types are roughly matching)
     let matchesType = true;
     if (filterType !== 'Todos') {
-       matchesType = type.toLowerCase() === filterType.toLowerCase();
+       matchesType = p.tipo?.toLowerCase() === filterType.toLowerCase();
     }
     
     return matchesSearch && matchesType;
@@ -154,9 +127,10 @@ export default function PublicProperties() {
                    Nenhum imóvel encontrado com estes filtros.
                 </div>
              ) : (
-                filteredProperties.map(prop => {
-                  const { type, desc, images } = extractTypeAndDesc(prop);
-                  let image = images.length > 0 ? images[0] : '';
+                 filteredProperties.map(prop => {
+                  let image = prop.images && prop.images.length > 0 ? getNormalizedImage(prop.images[0]) : '';
+                  const type = prop.tipo || 'Lote';
+                  const desc = prop.descricao || 'Imóvel sem descrição detalhada';
 
                   return (
                     <div key={prop.id} className="w-[85vw] sm:w-[300px] aspect-square bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden snap-center flex-shrink-0 flex flex-col transition-transform hover:-translate-y-1 hover:shadow-xl">

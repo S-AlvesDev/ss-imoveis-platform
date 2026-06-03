@@ -82,9 +82,8 @@ const triggerAIProcessing = async (conversationId) => {
                             },
                             body: JSON.stringify({
                                 number: purePhone,
-                                options: { delay: 1200, presence: 'composing' },
-                                textMessage: { text: replyText },
-                                text: replyText
+                                text: replyText,
+                                delay: 1200
                             })
                         });
                         if (!resp.ok) {
@@ -164,7 +163,7 @@ const triggerAIProcessing = async (conversationId) => {
                                 let baseUrl = process.env.EVOLUTION_API_URL.replace(/\/$/, '');
                                 if (!/^https?:\/\//i.test(baseUrl)) baseUrl = 'https://' + baseUrl;
                                 const purePhone = ct.phone.replace(/\D/g, '');
-                                await fetch(`${baseUrl}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
+                                const resp = await fetch(`${baseUrl}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
                                     method: 'POST',
                                     headers: { 
                                         'Content-Type': 'application/json', 
@@ -173,12 +172,16 @@ const triggerAIProcessing = async (conversationId) => {
                                     },
                                     body: JSON.stringify({ 
                                         number: purePhone, 
-                                        options: { delay: 1000, presence: 'composing' }, 
-                                        textMessage: { text: fallbackBotMessage },
-                                        text: fallbackBotMessage 
+                                        text: fallbackBotMessage,
+                                        delay: 1000
                                     })
                                 });
-                            } catch (e) {}
+                                if (!resp.ok) {
+                                    console.error('[Atendimento] Erro disparando Evolution (bot):', resp.status, await resp.text());
+                                }
+                            } catch (e) {
+                                console.error('[Atendimento] Erro fatal Evolution API (bot):', e);
+                            }
                         }
                     }
                 }
@@ -541,9 +544,8 @@ router.post('/conversations/:id/messages', async (req, res) => {
                             },
                             body: JSON.stringify({
                                 number: purePhone,
-                                options: { delay: 1200, presence: 'composing' },
-                                textMessage: { text: content },
-                                text: content
+                                text: content,
+                                delay: 1200
                             })
                         });
                         if (!resp.ok) {
