@@ -511,10 +511,10 @@ export default function App() {
             <div className="flex justify-center mb-4">
                 <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center p-1 border-2 border-blue-400">
                     {/* Em produção, src="/ss.webp" */}
-                    <img src="/logo-ss-imoveis.webp" alt="SS Imóveis" className="rounded-full" />
+                    <img src="/logo-ss-imoveis.webp" alt="Imobiliária São Severino" className="rounded-full" />
                 </div>
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">SS IMÓVEIS</h1>
+            <h1 className="text-2xl font-bold tracking-tight">IMOBILIÁRIA SÃO SEVERINO</h1>
             <p className="text-blue-200 text-sm opacity-80">Sistema de Gestão Imobiliário</p>
           </div>
           
@@ -855,7 +855,7 @@ export default function App() {
           {/* PORQUE ESCOLHER SECTION */}
           <section className="py-24 px-4 bg-[#f8fafc] border-t border-gray-200">
             <div className="max-w-6xl mx-auto text-center">
-              <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-[#2a3c5a] mb-4">PORQUE ESCOLHER A SS IMÓVEIS?</h2>
+              <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-[#2a3c5a] mb-4">PORQUE ESCOLHER A IMOBILIÁRIA SÃO SEVERINO?</h2>
               <p className="text-gray-600 text-lg mb-16 max-w-2xl mx-auto">Oferecemos as melhores soluções para clientes e parceiros.</p>
               
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 items-center">
@@ -957,7 +957,7 @@ export default function App() {
 
               {/* Bottom Copyright */}
               <div className="max-w-6xl mx-auto mt-16 pt-8 border-t border-[#1d2d3d] text-center text-[11px] font-medium opacity-80 pb-2 px-4">
-                2026 SS Imóveis Brasil - Criação S-AlvesDev. Todos os direitos reservados.
+                2026 Imobiliária São Severino Brasil - Criação S-AlvesDev. Todos os direitos reservados.
               </div>
             </div>
           </footer>
@@ -991,9 +991,9 @@ export default function App() {
     <aside className={`bg-[#1d2d3d] text-gray-300 w-64 md:w-64 fixed h-full flex flex-col overflow-y-auto transition-transform duration-300 z-50 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
       <div className="p-6 border-b border-gray-700 flex flex-col items-center shrink-0">
         <div className="w-16 h-16 bg-white rounded-full mb-3 flex items-center justify-center overflow-hidden border-2 border-blue-400">
-           <img src="/logo-ss-imoveis.webp" alt="SS Imóveis" />
+           <img src="/logo-ss-imoveis.webp" alt="Imobiliária São Severino" />
         </div>
-        <h2 className="text-white font-bold tracking-wider">SS IMÓVEIS</h2>
+        <h2 className="text-white font-bold tracking-wider">IMOBILIÁRIA SÃO SEVERINO</h2>
         <span className="text-[10px] text-blue-400 uppercase font-bold tracking-widest mt-1">Gestão Inteligente</span>
       </div>
       
@@ -1163,7 +1163,7 @@ export default function App() {
         <header className="bg-[#1D2D3D] text-white p-4 shadow-md flex justify-between items-center z-50 relative">
           <div className="flex items-center space-x-3">
              <div className="bg-white p-1 rounded-lg">
-               <img src="/logo-ss-imoveis.webp" alt="SS Imóveis" className="h-8 object-contain" />
+               <img src="/logo-ss-imoveis.webp" alt="Imobiliária São Severino" className="h-8 object-contain" />
              </div>
              <div>
                 <h1 className="text-sm font-bold uppercase tracking-widest">{user.nome}</h1>
@@ -1200,7 +1200,7 @@ export default function App() {
             {ICONS.menu}
           </button>
           <div className="flex items-center space-x-2">
-             <div className="text-xs font-bold text-gray-400 uppercase tracking-widest hidden sm:block">SS Imóveis</div>
+             <div className="text-xs font-bold text-gray-400 uppercase tracking-widest hidden sm:block">Imobiliária São Severino</div>
              <span className="text-gray-300 hidden sm:block">/</span>
              <div className="text-sm font-semibold text-gray-700 capitalize">{view.replace('-', ' ')}</div>
           </div>

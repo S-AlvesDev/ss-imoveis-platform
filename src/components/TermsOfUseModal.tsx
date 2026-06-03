@@ -21,7 +21,7 @@ export default function TermsOfUseModal({ isOpen, onClose }: TermsModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between p-6 bg-[#1d2d3d] text-white shrink-0">
           <div className="flex items-center space-x-2">
-            <img src="/banner.png" alt="SS Imóveis" className="w-[84px] h-[77px] object-contain rounded" referrerPolicy="no-referrer" />
+            <img src="/banner.png" alt="Imobiliária São Severino" className="w-[84px] h-[77px] object-contain rounded" referrerPolicy="no-referrer" />
             <div>
               <h2 className="text-lg font-bold tracking-tight">Termos de Uso do Sistema</h2>
               <span className="text-[10px] uppercase font-bold text-slate-300">Normas, Responsabilidades e Regras Contratuais</span>
@@ -40,7 +40,7 @@ export default function TermsOfUseModal({ isOpen, onClose }: TermsModalProps) {
           <div className="border-b pb-4 border-slate-100">
             <p className="text-xs text-gray-400 mb-1">Última atualização: 24 de maio de 2026</p>
             <p className="text-gray-600 font-medium">
-              Bem-vindo ao sistema de gestão e controle da <strong>SS Imóveis</strong>. Ao se registrar, acessar ou interagir com nosso sistema, você declara que compreende e aceita expressamente estes Termos de Uso em sua totalidade.
+              Bem-vindo ao sistema de gestão e controle da <strong>Imobiliária São Severino</strong>. Ao se registrar, acessar ou interagir com nosso sistema, você declara que compreende e aceita expressamente estes Termos de Uso em sua totalidade.
             </p>
           </div>
 
@@ -48,11 +48,11 @@ export default function TermsOfUseModal({ isOpen, onClose }: TermsModalProps) {
           <div className="space-y-2">
             <h3 className="text-base font-bold text-[#1d2d3d]">1. Cadastro de Usuário e Autenticação</h3>
             <p className="text-gray-650">
-              Para acessar o sistema de gestão da SS Imóveis ou formular propostas, o usuário deve criar uma conta enviando dados verídicos e precisos (Nome, E-mail, Telefone e Senha). 
+              Para acessar o sistema de gestão da Imobiliária São Severino ou formular propostas, o usuário deve criar uma conta enviando dados verídicos e precisos (Nome, E-mail, Telefone e Senha). 
             </p>
             <ul className="space-y-1.5 pl-4 list-disc text-gray-650">
               <li>Cada cadastro é pessoal, protegido por senha, e intransferível de acordo com nossa rede imobiliária.</li>
-              <li>A SS Imóveis pode, a qualquer momento e sob suspeita de fraude ou má-fé, bloquear ou apagar contas irregulares sem aviso prévio.</li>
+              <li>A Imobiliária São Severino pode, a qualquer momento e sob suspeita de fraude ou má-fé, bloquear ou apagar contas irregulares sem aviso prévio.</li>
             </ul>
           </div>
 
@@ -79,7 +79,7 @@ export default function TermsOfUseModal({ isOpen, onClose }: TermsModalProps) {
           <div className="space-y-2">
             <h3 className="text-base font-bold text-[#1d2d3d]">4. Propriedade Intelectual e Proteção de Marcas</h3>
             <p className="text-gray-650">
-              Todas as marcas registradas, layouts corporativos, códigos de programação, bases de dados de produtos imobiliários e arquivos de mídia hospedados são propriedade intelectual exclusiva da <strong>SS Imóveis</strong>, protegidos pela Lei de Direitos Autorais (Lei nº 9.610/1998) e de Propriedade Industrial (Lei nº 9.279/1996).
+              Todas as marcas registradas, layouts corporativos, códigos de programação, bases de dados de produtos imobiliários e arquivos de mídia hospedados são propriedade intelectual exclusiva da <strong>Imobiliária São Severino</strong>, protegidos pela Lei de Direitos Autorais (Lei nº 9.610/1998) e de Propriedade Industrial (Lei nº 9.279/1996).
             </p>
           </div>
 
@@ -87,7 +87,7 @@ export default function TermsOfUseModal({ isOpen, onClose }: TermsModalProps) {
           <div className="space-y-2">
             <h3 className="text-base font-bold text-[#1d2d3d]">5. Resolução de Conflitos e Foro</h3>
             <p className="text-gray-650">
-              Qualquer desentendimento legal relacionado ao uso do painel eletrônico será solucionado amigavelmente através do nosso canal de relacionamento. Caso contrário, fica eleito o Foro da Comarca da SS Imóveis para dirimir eventuais controvérsias judiciais, em conformidade com as leis do Brasil.
+              Qualquer desentendimento legal relacionado ao uso do painel eletrônico será solucionado amigavelmente através do nosso canal de relacionamento. Caso contrário, fica eleito o Foro da Comarca da Imobiliária São Severino para dirimir eventuais controvérsias judiciais, em conformidade com as leis do Brasil.
             </p>
           </div>
         </div>

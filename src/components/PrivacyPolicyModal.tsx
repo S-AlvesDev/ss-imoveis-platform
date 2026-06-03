@@ -21,7 +21,7 @@ export default function PrivacyPolicyModal({ isOpen, onClose }: PrivacyModalProp
         {/* Header */}
         <div className="flex items-center justify-between p-6 bg-[#1d2d3d] text-white shrink-0">
           <div className="flex items-center space-x-2">
-            <img src="/banner.png" alt="SS Imóveis" className="w-[84px] h-[77px] object-contain rounded" referrerPolicy="no-referrer" />
+            <img src="/banner.png" alt="Imobiliária São Severino" className="w-[84px] h-[77px] object-contain rounded" referrerPolicy="no-referrer" />
             <div>
               <h2 className="text-lg font-bold tracking-tight">Política de Privacidade</h2>
               <span className="text-[10px] uppercase font-bold text-slate-300">Conformidade com a LGPD (Lei nº 13.709/2018)</span>
@@ -40,7 +40,7 @@ export default function PrivacyPolicyModal({ isOpen, onClose }: PrivacyModalProp
           <div className="border-b pb-4 border-slate-100">
             <p className="text-xs text-gray-400 mb-1">Última atualização: 24 de maio de 2026</p>
             <p className="text-gray-600 font-medium">
-              A <strong>SS Imóveis</strong> valoriza a segurança e a confidencialidade dos seus dados. Esta Política de Privacidade descreve como coletamos, armazenamos, tratamos e protegemos seus dados pessoais de acordo com a <strong>Lei Geral de Proteção de Dados (LGPD) - Lei nº 13.709/2018</strong>.
+              A <strong>Imobiliária São Severino</strong> valoriza a segurança e a confidencialidade dos seus dados. Esta Política de Privacidade descreve como coletamos, armazenamos, tratamos e protegemos seus dados pessoais de acordo com a <strong>Lei Geral de Proteção de Dados (LGPD) - Lei nº 13.709/2018</strong>.
             </p>
           </div>
 
@@ -48,7 +48,7 @@ export default function PrivacyPolicyModal({ isOpen, onClose }: PrivacyModalProp
           <div className="space-y-2">
             <h3 className="text-base font-bold text-[#1d2d3d]">1. Agente de Tratamento e Controlador</h3>
             <p className="text-gray-650">
-              A SS Imóveis atua como <strong>Controladora</strong> no tratamento de dados obtidos por meio de cadastros na plataforma de gestão imobiliária. Isso significa que somos responsáveis por determinar as finalidades e os meios de tratamento dos seus dados essenciais para o andamento dos processos imobiliários e contratuais.
+              A Imobiliária São Severino atua como <strong>Controladora</strong> no tratamento de dados obtidos por meio de cadastros na plataforma de gestão imobiliária. Isso significa que somos responsáveis por determinar as finalidades e os meios de tratamento dos seus dados essenciais para o andamento dos processos imobiliários e contratuais.
             </p>
           </div>
 
@@ -78,7 +78,7 @@ export default function PrivacyPolicyModal({ isOpen, onClose }: PrivacyModalProp
           <div className="space-y-2">
             <h3 className="text-base font-bold text-[#1d2d3d]">4. Compartilhamento e Transferência de Dados</h3>
             <p className="text-gray-650">
-              A SS Imóveis <strong>não vende nem comercializa</strong> de nenhuma forma seus dados pessoais. Seus dados poderão ser compartilhados apenas com parceiros estritamente necessários para viabilizar as transações (como cartórios, instituições financeiras para financiamento imobiliário e os órgãos anuentes na escrituração do imóvel).
+              A Imobiliária São Severino <strong>não vende nem comercializa</strong> de nenhuma forma seus dados pessoais. Seus dados poderão ser compartilhados apenas com parceiros estritamente necessários para viabilizar as transações (como cartórios, instituições financeiras para financiamento imobiliário e os órgãos anuentes na escrituração do imóvel).
             </p>
           </div>
 

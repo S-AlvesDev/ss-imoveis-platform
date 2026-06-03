@@ -107,7 +107,7 @@ export default function ImoveisInteressados() {
     if (rawDigits.length <= 11) {
       formattedPhone = `55${rawDigits}`;
     }
-    const message = `Olá ${nome}, sou da SS Imóveis. Vi que demonstrou interesse no imóvel "${imovelNome}" em nosso site. Gostaria de agendar uma visita ou tirar dúvidas?`;
+    const message = `Olá ${nome}, sou da Imobiliária São Severino. Vi que demonstrou interesse no imóvel "${imovelNome}" em nosso site. Gostaria de agendar uma visita ou tirar dúvidas?`;
     return `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
   };
 

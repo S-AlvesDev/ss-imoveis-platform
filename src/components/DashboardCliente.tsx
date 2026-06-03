@@ -216,10 +216,10 @@ export default function DashboardCliente({ onLogout, clienteNome = "Cliente SS",
           <div className="flex justify-between items-center h-20">
             <div className="flex items-center space-x-4">
               <div className="bg-white/95 p-1.5 rounded-xl shadow-lg flex items-center justify-center transition-transform hover:scale-105">
-                <img src="/logo-ss-imoveis.webp" alt="SS Imóveis" className="w-10 h-10 rounded-lg object-contain" />
+                <img src="/logo-ss-imoveis.webp" alt="Imobiliária São Severino" className="w-10 h-10 rounded-lg object-contain" />
               </div>
               <div className="flex flex-col">
-                <span className="font-extrabold text-lg sm:text-xl tracking-tight leading-none text-white">SS IMÓVEIS</span>
+                <span className="font-extrabold text-lg sm:text-xl tracking-tight leading-none text-white">IMOBILIÁRIA SÃO SEVERINO</span>
                 <span className="text-[10px] text-blue-400 font-bold uppercase tracking-widest mt-1">Portal Oficial do Cliente</span>
               </div>
             </div>
@@ -720,7 +720,7 @@ export default function DashboardCliente({ onLogout, clienteNome = "Cliente SS",
 
       {/* Floating Action Button for support */}
       <a
-        href={`https://wa.me/5584994511030?text=${encodeURIComponent("Olá, sou cliente cadastrado no site SS Imóveis e gostaria de falar com o suporte.")}`}
+        href={`https://wa.me/5584994511030?text=${encodeURIComponent("Olá, sou cliente cadastrado no site Imobiliária São Severino e gostaria de falar com o suporte.")}`}
         target="_blank"
         rel="noopener noreferrer"
         className="fixed bottom-6 right-6 bg-emerald-500 text-white p-4.5 rounded-full shadow-2xl hover:bg-emerald-600 transition-all z-40 active:scale-95 flex items-center justify-center hover:scale-110"

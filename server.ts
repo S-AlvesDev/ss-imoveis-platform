@@ -122,7 +122,7 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 async function startServer() {
-  console.log('[SS Imóveis] Iniciando servidor...');
+  console.log('[Imobiliária São Severino] Iniciando servidor...');
   const app = express();
   const server = http.createServer(app);
   const PORT = Number(process.env.PORT) || 3000;
@@ -349,7 +349,7 @@ async function startServer() {
     try {
       const tp = await getTransporter();
       await tp.sendMail({
-          from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'alvesluizsamuel@gmail.com' },
+          from: { name: 'Imobiliária São Severino', address: process.env.SMTP_FROM_EMAIL || 'alvesluizsamuel@gmail.com' },
           to: targetEmail,
           subject: 'Recuperação de Senha',
           html: `<p>Seu código para recuperar a senha é: <strong>${code}</strong></p><p>Ele expira em 15 minutos.</p>`
@@ -412,12 +412,12 @@ async function startServer() {
       try {
         const mailTransporter = await getTransporter();
         await mailTransporter.sendMail({
-          from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'alvesluizsamuel@gmail.com' },
+          from: { name: 'Imobiliária São Severino', address: process.env.SMTP_FROM_EMAIL || 'alvesluizsamuel@gmail.com' },
           to: email,
-          subject: 'Seu código de verificação - SS Imóveis',
+          subject: 'Seu código de verificação - Imobiliária São Severino',
           text: `Olá!\n\nSeu código de verificação é: ${code}\n\nEste código é válido por 10 minutos.`,
           html: `<div style="font-family: sans-serif; text-align: center; padding: 40px 20px; color: #333; background-color: #f8fafc; border-radius: 12px; max-width: 500px; margin: 0 auto;">
-                   <h1 style="color: #1d4ed8; font-size: 24px; margin-bottom: 8px; margin-top: 0;">SS Imóveis</h1>
+                   <h1 style="color: #1d4ed8; font-size: 24px; margin-bottom: 8px; margin-top: 0;">Imobiliária São Severino</h1>
                    <h2 style="font-size: 20px; margin-bottom: 24px; font-weight: normal; margin-top: 0;">Código de Verificação</h2>
                    <p style="margin-bottom: 12px; font-size: 16px;">Utilize o código abaixo para continuar seu cadastro:</p>
                    <div style="background-color: #ffffff; padding: 24px 32px; border-radius: 8px; border: 1px solid #e2e8f0; display: inline-block; font-size: 36px; font-weight: bold; letter-spacing: 6px; color: #0f172a; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
@@ -812,7 +812,7 @@ async function startServer() {
        
        // Alert admin
        await tp.sendMail({
-           from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'alvesluizsamuel@gmail.com' },
+           from: { name: 'Imobiliária São Severino', address: process.env.SMTP_FROM_EMAIL || 'alvesluizsamuel@gmail.com' },
            to: process.env.ADMIN_EMAIL || 'admin@ssimoveis.com',
            subject: 'Novo Lead Recebido!',
            html: `<h2>Novo Interesse em Imóvel</h2>
@@ -825,7 +825,7 @@ async function startServer() {
        // Send technical sheet to client if email is provided
        if (email) {
            await tp.sendMail({
-               from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'alvesluizsamuel@gmail.com' },
+               from: { name: 'Imobiliária São Severino', address: process.env.SMTP_FROM_EMAIL || 'alvesluizsamuel@gmail.com' },
                to: email,
                subject: `Detalhes do Imóvel: ${imovelNome}`,
                html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
@@ -839,7 +839,7 @@ async function startServer() {
                         <hr style="border: 1px solid #eee; margin: 20px 0;" />
                         <p>Nossa equipe entrará em contato com você em breve através do telefone ${telefone} para agendar uma visita e tirar suas dúvidas.</p>
                         <p>Atenciosamente,</p>
-                        <p><strong>Equipe SS Imóveis</strong></p>
+                        <p><strong>Equipe Imobiliária São Severino</strong></p>
                       </div>`
            }).catch(e => console.log('[SMTP] Error sending client interest detail', e));
        }
@@ -1327,7 +1327,7 @@ async function startServer() {
             try {
                 const tp = await getTransporter();
                 await tp.sendMail({
-                    from: { name: 'SS Imóveis', address: process.env.SMTP_FROM_EMAIL || 'alvesluizsamuel@gmail.com' },
+                    from: { name: 'Imobiliária São Severino', address: process.env.SMTP_FROM_EMAIL || 'alvesluizsamuel@gmail.com' },
                     to: process.env.ADMIN_EMAIL || 'admin@ssimoveis.com',
                     subject: `Alerta de Estoque: ${mat.nome}`,
                     html: `<h3>Alerta de Estoque Mínimo Atingido</h3>
@@ -1531,7 +1531,7 @@ async function startServer() {
   process.on('SIGTERM', gracefulShutdown);
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`SS Imóveis Server running on port ${PORT}`);
+    console.log(`Imobiliária São Severino Server running on port ${PORT}`);
   });
 
   server.on('error', (err: any) => {

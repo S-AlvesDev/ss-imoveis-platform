@@ -1,4 +1,4 @@
--- Reestruturação Supabase / PostgreSQL para SS Imóveis
+-- Reestruturação Supabase / PostgreSQL para Imobiliária São Severino
 
 -- 1. Tabela de Users (Staff / Clients Logins)
 CREATE TABLE IF NOT EXISTS public.users (
