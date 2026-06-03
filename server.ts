@@ -94,6 +94,18 @@ function sanitizeProperty(p: any) {
           tipo = parts[1] ? parts[1].trim() : 'Lote';
       } else {
           actualDesc = baseText;
+          const searchStr = (p.nome + ' ' + actualDesc).toLowerCase();
+          if (searchStr.includes('apartamento') || searchStr.includes('apto') || searchStr.includes('edifício')) {
+              tipo = 'Apartamento';
+          } else if (searchStr.includes('casa') || searchStr.includes('duplex') || searchStr.includes('mansão')) {
+              tipo = 'Casa';
+          } else if (searchStr.includes('terreno') || searchStr.includes('lote')) {
+              tipo = 'Lote';
+          } else if (searchStr.includes('galpão') || searchStr.includes('comercial') || searchStr.includes('loja')) {
+              tipo = 'Comercial';
+          } else if (searchStr.includes('mcmv') || searchStr.includes('minha vida')) {
+              tipo = 'Programa Minha Casa Minha Vida (MCMV)';
+          }
       }
   }
 
@@ -973,6 +985,7 @@ async function startServer() {
       if (errClients) throw errClients;
       const { data: properties, error: errProp } = await supabaseServer.from('properties').select('*');
       if (errProp) throw errProp;
+      const sanitizedProperties = (properties || []).map(p => sanitizeProperty(p));
       const { data: contracts, error: errCont } = await supabaseServer.from('contracts').select('*');
       if (errCont) throw errCont;
       const { data: staff, error: errStaff } = await supabaseServer.from('users').select('*').neq('role', 'CLIENTE');

@@ -76,18 +76,23 @@ export default function ControleClientes() {
     setShowModal(true);
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const [swapPrompt, setSwapPrompt] = useState<{
+    show: boolean;
+    targetProcess: any;
+    formData: any;
+  } | null>(null);
+
+  const performSave = async (payloadToSave: any, processId: string | null = currentProcess?.id || null) => {
     setIsSubmitting(true);
     try {
-      const url = currentProcess 
-        ? `/api/controle-clientes/${currentProcess.id}` 
+      const url = processId 
+        ? `/api/controle-clientes/${processId}` 
         : `/api/controle-clientes`;
       
-      const method = currentProcess ? 'PUT' : 'POST';
+      const method = processId ? 'PUT' : 'POST';
 
       // Parse empty strings to null for dates
-      const payload = { ...formData };
+      const payload = { ...payloadToSave };
       if (!payload.data_simulacao) payload.data_simulacao = null;
       if (!payload.data_aprovacao) payload.data_aprovacao = null;
       if (!payload.validade) payload.validade = null;
@@ -99,17 +104,84 @@ export default function ControleClientes() {
       });
 
       if (res.ok) {
-        toast.success(currentProcess ? 'Processo atualizado!' : 'Processo cadastrado!');
-        setShowModal(false);
-        loadData();
+        return true;
       } else {
         const json = await res.json();
         toast.error('Erro: ' + (json.error || 'Falha ao salvar.'));
+        return false;
       }
     } catch (err) {
       toast.error('Erro inesperado.');
+      return false;
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Check for conflict
+    if (currentProcess && formData.quadra && formData.lote) {
+      const changedQuadraOrLote = formData.quadra !== currentProcess.quadra || formData.lote !== currentProcess.lote;
+      if (changedQuadraOrLote) {
+        const conflict = data.find(p => p.id !== currentProcess.id && p.quadra === formData.quadra && p.lote === formData.lote);
+        if (conflict) {
+          setSwapPrompt({
+            show: true,
+            targetProcess: conflict,
+            formData: { ...formData }
+          });
+          return;
+        }
+      }
+    }
+
+    const success = await performSave(formData);
+    if (success) {
+      toast.success(currentProcess ? 'Processo atualizado!' : 'Processo cadastrado!');
+      setShowModal(false);
+      loadData();
+    }
+  };
+
+  const confirmSwap = async () => {
+    if (!swapPrompt || !currentProcess) return;
+
+    const oldQuadra = currentProcess.quadra;
+    const oldLote = currentProcess.lote;
+
+    // 1 - Atualiza o processo atual com a nova quadra/lote
+    const success1 = await performSave(swapPrompt.formData, currentProcess.id);
+    if (!success1) return;
+
+    // 2 - Atualiza o processo conflitante com a quadra/lote antiga do processo atual
+    const updatePayload = {
+      ...swapPrompt.targetProcess,
+      quadra: oldQuadra,
+      lote: oldLote
+    };
+    const success2 = await performSave(updatePayload, swapPrompt.targetProcess.id);
+
+    if (success2) {
+      toast.success('Lotes invertidos com sucesso!');
+    } else {
+      toast.warning('Processo atual salvo, mas falha ao inverter o outro processo.');
+    }
+    
+    setSwapPrompt(null);
+    setShowModal(false);
+    loadData();
+  };
+
+  const confirmOverwrite = async () => {
+    if (!swapPrompt) return;
+    const success = await performSave(swapPrompt.formData, currentProcess?.id || null);
+    if (success) {
+      toast.success('Processo atualizado!');
+      setSwapPrompt(null);
+      setShowModal(false);
+      loadData();
     }
   };
 
@@ -300,7 +372,7 @@ export default function ControleClientes() {
       </div>
 
       {/* Modal Formulário */}
-      {showModal && (
+      {showModal && !swapPrompt && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="flex justify-between items-center p-5 border-b border-gray-100 bg-gray-50/50">
@@ -406,6 +478,42 @@ export default function ControleClientes() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {swapPrompt && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 flex flex-col items-center text-center">
+            <div className="w-16 h-16 bg-orange-100 text-orange-500 rounded-full flex items-center justify-center mb-4">
+              <AlertCircle size={32} />
+            </div>
+            <h3 className="text-xl font-bold text-gray-800 mb-2">Conflito de Quadra e Lote</h3>
+            <p className="text-gray-600 mb-6 leading-relaxed">
+              Já existe um cliente cadastro na <span className="font-semibold text-gray-800">Quadra {swapPrompt.formData.quadra}</span>, <span className="font-semibold text-gray-800">Lote {swapPrompt.formData.lote}</span> (Cliente: {swapPrompt.targetProcess.nome_cliente || 'N/A'}).
+              <br/><br/>
+              Deseja inverter os lotes (o cliente antigo vai para a Quadra {currentProcess?.quadra} Lote {currentProcess?.lote}) ou apenas sobrepor esta informação sem alterar o outro cliente?
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
+              <button 
+                onClick={() => setSwapPrompt(null)} 
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors flex-1"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={confirmOverwrite} 
+                className="px-4 py-2 bg-gray-800 text-white rounded-lg font-medium hover:bg-gray-900 transition-colors flex-1"
+              >
+                Só Salvar Atual
+              </button>
+              <button 
+                onClick={confirmSwap} 
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex-1"
+              >
+                Inverter Lotes
+              </button>
+            </div>
           </div>
         </div>
       )}
