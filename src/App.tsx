@@ -178,8 +178,18 @@ const PropertyGallery = ({ images, status }: { images?: string[], status: string
 };
 
 import PublicProperties from './components/PublicProperties';
+import BlogPublicList from './components/BlogPublicList';
+import BlogPublicPost from './components/BlogPublicPost';
+import AdminBlogPanel from './components/AdminBlogPanel';
 
 export default function App() {
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
+  useEffect(() => {
+     const onLocationChange = () => setCurrentPath(window.location.pathname);
+     window.addEventListener('popstate', onLocationChange);
+     return () => window.removeEventListener('popstate', onLocationChange);
+  }, []);
+
   const [user, setUser] = useState<any>(null);
   const [token, setToken] = useState<string>('');
   const [view, setView] = useState('dashboard');
@@ -239,7 +249,7 @@ export default function App() {
   // Property Form State
   const [showPropertyModal, setShowPropertyModal] = useState(false);
   const [availableImages, setAvailableImages] = useState<string[]>([]);
-  const [propertyForm, setPropertyForm] = useState({ id: null as number | null, nome: '', valor: 0, localizacao: '', descricao: '', images: [] as string[], tipo: 'Lote' });
+  const [propertyForm, setPropertyForm] = useState({ id: null as number | null, nome: '', valor: 0, localizacao: '', descricao: '', images: [] as string[], tipo: 'Lote', status: 'DISPONÍVEL', detalhes: { quartos: 0, salas: 0, banheiros: 0, area: '', mobiliado: false, corretor_matricula: '' } });
   const [selectedImageStr, setSelectedImageStr] = useState<string>('');
   
   useEffect(() => {
@@ -478,6 +488,15 @@ export default function App() {
         console.error('Error paying installment:', err);
     }
   };
+
+  if (currentPath === '/blog') {
+     return <BlogPublicList />;
+  }
+  
+  if (currentPath.startsWith('/blog/')) {
+     const slug = currentPath.replace('/blog/', '');
+     return <BlogPublicPost slug={slug} />;
+  }
 
   if (!user) {
     return (
@@ -773,6 +792,31 @@ export default function App() {
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 animate-bounce hidden md:flex flex-col items-center opacity-70">
               <span className="text-xs tracking-widest uppercase mb-2 text-blue-200">Saiba Mais</span>
               <ArrowDown className="w-6 h-6 text-blue-200" />
+            </div>
+          </section>
+
+          {/* SEÇÃO INTRODUTÓRIA DO BLOG */}
+          <section className="py-16 px-6 bg-slate-50 border-b border-gray-200">
+            <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
+              <div className="space-y-4 max-w-2xl text-left">
+                <span className="inline-block px-3 py-1 rounded-full bg-[#4c79f5] text-white text-xs font-black uppercase tracking-widest">
+                  Notícias & Novidades
+                </span>
+                <h2 className="text-3xl md:text-4xl font-black tracking-tight text-[#1d2d3d] uppercase">
+                  Acompanhe nosso Blog
+                </h2>
+                <p className="text-gray-600 text-sm md:text-base leading-relaxed">
+                  Fique por dentro das últimas tendências do mercado imobiliário, dicas essenciais para compra e venda de imóveis, e todas as novidades da Imobiliária São Severino para ajudar você no seu próximo passo.
+                </p>
+              </div>
+              <div className="flex-shrink-0 w-full md:w-auto flex justify-start md:justify-end">
+                <button 
+                  onClick={() => window.location.href = '/blog'} 
+                  className="w-full md:w-auto flex items-center justify-center gap-3 bg-[#1447e6] hover:bg-[#0f3bb2] text-white px-8 py-3.5 rounded-full font-black transition-all shadow-md hover:scale-105 text-sm tracking-wider uppercase"
+                >
+                  <FileText size={20} /> Acessar o Blog
+                </button>
+              </div>
             </div>
           </section>
 
@@ -1080,7 +1124,10 @@ export default function App() {
               <span className="mr-3">{ICONS.staff}</span>
               <span className="text-sm font-medium">Gestão de Equipe</span>
             </button>
-
+            <button onClick={() => handleNavClick('blog')} className={`w-full flex items-center px-4 py-3 rounded-md transition-all ${view === 'blog' ? 'bg-blue-700 text-white shadow-md' : 'hover:bg-gray-800'}`}>
+              <span className="mr-3"><FileText size={20} /></span>
+              <span className="text-sm font-medium">Blog</span>
+            </button>
           </>
         )}
 
@@ -1152,6 +1199,8 @@ export default function App() {
         contratoData={clientContract}
         imovelData={property}
         todosImoveis={data.properties}
+        vendedores={data.staff}
+        user={user}
       />
     );
   }
@@ -1217,6 +1266,12 @@ export default function App() {
 
         <div className="p-6 max-w-7xl mx-auto">
           <AnimatePresence mode="wait">
+            {view === 'blog' && (
+              <motion.div key="blog" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <AdminBlogPanel />
+              </motion.div>
+            )}
+            
             {view === 'dashboard' && (
               <motion.div 
                 key="dashboard"
@@ -1528,9 +1583,10 @@ export default function App() {
                       <option value="TODOS">Todos Status</option>
                       <option value="DISPONÍVEL">Disponíveis</option>
                       <option value="VENDIDO">Vendidos</option>
+                      <option value="OCULTO">Ocultos</option>
                     </select>
                     <button onClick={() => {
-                      setPropertyForm({ id: null, nome: '', valor: 0, localizacao: '', descricao: '', images: [], tipo: 'Lote' });
+                      setPropertyForm({ id: null, nome: '', valor: 0, localizacao: '', descricao: '', images: [], tipo: 'Lote', status: 'DISPONÍVEL', detalhes: { quartos: 0, salas: 0, banheiros: 0, area: '', mobiliado: false } });
                       setIsConfirmingDeleteProperty(false);
                       setShowPropertyModal(true);
                     }} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 flex items-center">
@@ -1556,49 +1612,79 @@ export default function App() {
                   {data.properties
                     .filter((p:any) => propertyFilterStatus === 'TODOS' || p.status === propertyFilterStatus)
                     .filter((p:any) => propertySearchText === '' || p.nome.toLowerCase().includes(propertySearchText.toLowerCase()) || (p.localizacao || '').toLowerCase().includes(propertySearchText.toLowerCase()))
-                    .map((p: any) => (
-                    <div key={p.id} className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 flex flex-col justify-between">
-                      <div>
-                        <div className="-mx-6 -mt-6 mb-4 relative">
-                          <PropertyGallery images={p.images} status={p.status} />
-                          <div className="absolute top-4 left-4 flex items-center space-x-1.5">
-                            <span className={`text-[9px] font-black px-2 py-1 rounded-full uppercase tracking-widest shadow-sm ${
-                              p.status === 'DISPONÍVEL' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700 backdrop-blur-sm'
-                            }`}>
-                              {p.status}
-                            </span>
-                            {p.tipo && (
-                              <span className="text-[9px] font-black px-2 py-1 rounded-full uppercase tracking-widest shadow-sm bg-blue-100 text-blue-700">
-                                {p.tipo}
+                    .map((p: any) => {
+                      const firstImg = p.images && p.images.length > 0 ? p.images[0] : '';
+                      const resolvedSrc = firstImg && !firstImg.includes('/') && !firstImg.startsWith('http') 
+                        ? `/assets/imoveis/${firstImg}` 
+                        : firstImg;
+                      
+                      return (
+                        <div key={p.id} className="bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl border border-slate-100 flex flex-col justify-between transition-all group">
+                          <div>
+                            {/* Image Frame */}
+                            <div className="relative h-48 w-full bg-slate-100 overflow-hidden group">
+                              {resolvedSrc ? (
+                                <img src={resolvedSrc} alt={p.nome} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                              ) : (
+                                <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
+                                  <Home size={40} />
+                                </div>
+                              )}
+                              
+                              {/* Overlay fade for contrast */}
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                              
+                              <div className="absolute top-3 left-3 flex items-center space-x-1.5">
+                                <span className={`text-[9px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full backdrop-blur-md shadow-sm text-white ${
+                                  p.status === 'DISPONÍVEL' ? 'bg-emerald-500/90' : p.status === 'OCULTO' ? 'bg-gray-500/90' : 'bg-rose-500/90'
+                                }`}>
+                                  {p.status}
+                                </span>
+                                {p.tipo && (
+                                  <span className="bg-[#0F1E2E]/80 backdrop-blur-md text-white text-[9px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full shadow-sm">
+                                    {p.tipo}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Card Meta */}
+                            <div className="p-5 space-y-2">
+                              <h4 className="font-extrabold text-slate-950 text-base leading-snug line-clamp-1 group-hover:text-blue-600 transition-colors">{p.nome}</h4>
+                              <div className="flex items-start text-xs text-slate-400 leading-normal line-clamp-2">
+                                <MapPin size={12} className="mr-1.5 mt-0.5 text-blue-500 flex-shrink-0" />
+                                <span>{p.localizacao || 'Localização não informada'}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Card Footer Price & Action */}
+                          <div className="px-5 pb-5 pt-3 border-t border-slate-50 flex items-center justify-between">
+                            <div>
+                              <span className="text-[9px] font-bold text-slate-450 uppercase block tracking-widest leading-none mb-1">VALOR DE VENDA</span>
+                              <span className="text-base font-extrabold text-blue-600 leading-snug inline-block">
+                                R$ {(p.valor ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                               </span>
-                            )}
+                            </div>
+                            <button 
+                               onClick={() => {
+                                  setPropertyForm({ id: p.id, nome: p.nome, valor: p.valor, localizacao: p.localizacao, descricao: p.descricao, images: p.images || [], tipo: p.tipo || 'Lote', status: p.status || 'DISPONÍVEL', detalhes: { quartos: p.detalhes?.quartos || 0, salas: p.detalhes?.salas || 0, banheiros: p.detalhes?.banheiros || 0, area: p.detalhes?.area || '', mobiliado: p.detalhes?.mobiliado || false, corretor_matricula: p.detalhes?.corretor_matricula || '' } });
+                                  setIsConfirmingDeleteProperty(false);
+                                  setShowPropertyModal(true);
+                               }}
+                               className="bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 text-[10px] font-bold px-4 py-2.5 rounded-xl border border-slate-100 hover:border-blue-200 transition-colors uppercase tracking-widest shadow-sm"
+                            >
+                               EDITAR
+                            </button>
+                          </div>
+                          
+                          {/* Admin ID hint (small details for admin only) */}
+                          <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-md text-slate-500 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md shadow-sm">
+                            #{p.id}
                           </div>
                         </div>
-                        <h3 className="font-bold text-gray-800 mb-1">{p.nome}</h3>
-                        <p className="text-gray-400 text-[10px] uppercase font-bold mb-2 flex items-center">
-                          <MapPin size={10} className="mr-1 text-blue-500" />
-                          {p.localizacao || 'Localização não informada'}
-                        </p>
-                        <p className="text-xl font-black text-gray-900">R$ {(p.valor ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                        {p.descricao && (
-                          <p className="mt-3 text-[10px] text-gray-500 line-clamp-2 italic leading-relaxed">
-                            "{p.descricao}"
-                          </p>
-                        )}
-                      </div>
-                      <div className="mt-6 pt-4 border-t border-gray-50 flex justify-between items-center text-[10px]">
-                        <span className="font-bold text-gray-400 uppercase">#{p.id}</span>
-                        <button 
-                           onClick={() => {
-                              setPropertyForm({ id: p.id, nome: p.nome, valor: p.valor, localizacao: p.localizacao, descricao: p.descricao, images: p.images || [], tipo: p.tipo || 'Lote' });
-                              setIsConfirmingDeleteProperty(false);
-                              setShowPropertyModal(true);
-                           }}
-                           className="text-blue-600 font-bold hover:underline"
-                        >EDITAR</button>
-                      </div>
-                    </div>
-                  ))}
+                      );
+                    })}
                 </div>
               </motion.div>
             )}
@@ -2038,9 +2124,12 @@ export default function App() {
                       formData.append('localizacao', propertyForm.localizacao);
                       formData.append('descricao', propertyForm.descricao);
                       formData.append('tipo', propertyForm.tipo || 'Lote');
-                            
-                      if (selectedImageStr) {
-                        formData.append('imagemSelecionada', selectedImageStr);
+                      if (propertyForm.status) {
+                         formData.append('status', propertyForm.status);
+                      }
+                      formData.append('images', JSON.stringify(propertyForm.images));
+                      if (propertyForm.detalhes) {
+                         formData.append('detalhes', JSON.stringify(propertyForm.detalhes));
                       }
                       
                       const url = propertyForm.id ? `/api/properties/${propertyForm.id}` : '/api/properties';
@@ -2052,7 +2141,7 @@ export default function App() {
                       if (res.ok) {
                         toast.success(propertyForm.id ? 'Imóvel atualizado com sucesso!' : 'Imóvel cadastrado com sucesso!');
                         setShowPropertyModal(false);
-                        setPropertyForm({ id: null, nome: '', valor: 0, localizacao: '', descricao: '', images: [], tipo: 'Lote' });
+                        setPropertyForm({ id: null, nome: '', valor: 0, localizacao: '', descricao: '', images: [], tipo: 'Lote', status: 'DISPONÍVEL', detalhes: { quartos: 0, salas: 0, banheiros: 0, area: '', mobiliado: false, corretor_matricula: '' } });
                         loadApplicationData();
                       } else {
                         let errMsg = 'Erro ao processar';
@@ -2091,6 +2180,19 @@ export default function App() {
                       </select>
                     </div>
                     <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase mb-1">Status do Imóvel</label>
+                      <select 
+                        required
+                        className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 ring-blue-500 bg-white font-sans text-sm font-semibold"
+                        value={propertyForm.status}
+                        onChange={e => setPropertyForm({...propertyForm, status: e.target.value})}
+                      >
+                        <option value="DISPONÍVEL">Disponível (Visível)</option>
+                        <option value="VENDIDO">Vendido</option>
+                        <option value="OCULTO">Oculto (Não exibido no site)</option>
+                      </select>
+                    </div>
+                    <div>
                       <label className="block text-[10px] font-black text-gray-500 uppercase mb-1">Valor Sugerido para Venda</label>
                       <input 
                         type="number"
@@ -2122,23 +2224,94 @@ export default function App() {
                         onChange={e => setPropertyForm({...propertyForm, descricao: e.target.value})}
                       />
                     </div>
+                    {/* DETAILS */}
+                    <div className="p-4 bg-gray-50 border rounded-xl space-y-4">
+                       <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">Detalhes Adicionais</h4>
+                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-black text-gray-500 uppercase mb-1">Quartos</label>
+                            <input type="number" className="w-full px-3 py-2 border rounded-lg focus:ring-2 ring-blue-500"
+                              value={propertyForm.detalhes?.quartos || 0}
+                              onChange={e => setPropertyForm({...propertyForm, detalhes: {...propertyForm.detalhes, quartos: Number(e.target.value)}})}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-black text-gray-500 uppercase mb-1">Salas</label>
+                            <input type="number" className="w-full px-3 py-2 border rounded-lg focus:ring-2 ring-blue-500"
+                              value={propertyForm.detalhes?.salas || 0}
+                              onChange={e => setPropertyForm({...propertyForm, detalhes: {...propertyForm.detalhes, salas: Number(e.target.value)}})}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-black text-gray-500 uppercase mb-1">Banheiros</label>
+                            <input type="number" className="w-full px-3 py-2 border rounded-lg focus:ring-2 ring-blue-500"
+                              value={propertyForm.detalhes?.banheiros || 0}
+                              onChange={e => setPropertyForm({...propertyForm, detalhes: {...propertyForm.detalhes, banheiros: Number(e.target.value)}})}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-black text-gray-500 uppercase mb-1">Área (m²)</label>
+                            <input type="text" className="w-full px-3 py-2 border rounded-lg focus:ring-2 ring-blue-500"
+                              value={propertyForm.detalhes?.area || ''}
+                              onChange={e => setPropertyForm({...propertyForm, detalhes: {...propertyForm.detalhes, area: e.target.value}})}
+                            />
+                          </div>
+                       </div>
+                       <label className="flex items-center space-x-2 text-sm font-bold text-slate-700 mt-2 cursor-pointer">
+                         <input type="checkbox" className="rounded w-4 h-4 text-blue-600 focus:ring-blue-500"
+                           checked={propertyForm.detalhes?.mobiliado || false}
+                           onChange={e => setPropertyForm({...propertyForm, detalhes: {...propertyForm.detalhes, mobiliado: e.target.checked}})}
+                         />
+                         <span>Imóvel Mobiliado</span>
+                       </label>
+                    </div>
                     <div>
-                      <label className="block text-[10px] font-black text-gray-500 uppercase mb-1">Capa / Imagem do Imóvel</label>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase mb-1">Corretor Vinculado (Opcional)</label>
+                      <select 
+                        className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 ring-blue-500 bg-white font-sans text-sm font-semibold mb-3 text-slate-800"
+                        value={propertyForm.detalhes?.corretor_matricula || ''}
+                        onChange={e => setPropertyForm({...propertyForm, detalhes: { ...(propertyForm.detalhes || {}), corretor_matricula: e.target.value }})}
+                      >
+                        <option value="">Nenhum (Sem corretor selecionado)</option>
+                        {data.staff.filter((s:any) => s.role !== 'CLIENTE').map((s: any) => (
+                          <option key={s.id} value={s.matricula}>{s.nome} ({s.matricula})</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase mb-1">Capa e Múltiplas Imagens do Imóvel</label>
+                      <p className="text-xs text-gray-500 mb-2">Clique para selecionar ou remover. A primeira imagem será a capa no portal principal e demais serão visualizadas na página de detalhes.</p>
                       <div className="grid grid-cols-3 gap-3 max-h-48 overflow-y-auto p-2 bg-gray-50 border rounded-lg">
                         {availableImages.length === 0 ? (
                           <div className="col-span-3 text-xs text-gray-400 text-center py-4">
                             Nenhuma imagem encontrada na pasta do servidor.
                           </div>
                         ) : (
-                          availableImages.map((imgPath, idx) => (
-                            <img
-                              key={idx}
-                              src={`/assets/imoveis/${imgPath}`}
-                              alt={`Imagem ${idx}`}
-                              className={`w-full h-20 object-cover rounded cursor-pointer transition-all ${selectedImageStr === imgPath ? 'ring-4 ring-blue-500 shadow-md scale-105 z-10' : 'hover:opacity-80 border border-gray-200'}`}
-                              onClick={() => setSelectedImageStr(imgPath)}
-                            />
-                          ))
+                          availableImages.map((imgPath, idx) => {
+                            const isSelected = propertyForm.images.includes(`/assets/imoveis/${imgPath}`);
+                            return (
+                              <div key={idx} className="relative group">
+                                <img
+                                  src={`/assets/imoveis/${imgPath}`}
+                                  alt={`Imagem ${idx}`}
+                                  className={`w-full h-20 object-cover rounded cursor-pointer transition-all ${isSelected ? 'ring-4 ring-blue-500 shadow-md scale-105 z-10 opacity-100' : 'hover:opacity-80 border border-gray-200 opacity-60'}`}
+                                  onClick={() => {
+                                      const fullPath = `/assets/imoveis/${imgPath}`;
+                                      if (isSelected) {
+                                          setPropertyForm({...propertyForm, images: propertyForm.images.filter(x => x !== fullPath)});
+                                      } else {
+                                          setPropertyForm({...propertyForm, images: [...propertyForm.images, fullPath]});
+                                      }
+                                  }}
+                                />
+                                {isSelected && (
+                                  <div className="absolute top-1 right-1 bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-black shadow-md z-20 pointer-events-none">
+                                    {propertyForm.images.indexOf(`/assets/imoveis/${imgPath}`) + 1}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
                         )}
                       </div>
                     </div>
@@ -2183,7 +2356,7 @@ export default function App() {
                                       toast.success('Imóvel excluído com sucesso!');
                                       setShowPropertyModal(false);
                                       setIsConfirmingDeleteProperty(false);
-                                      setPropertyForm({ id: null, nome: '', valor: 0, localizacao: '', descricao: '', images: [], tipo: 'Lote' });
+                                      setPropertyForm({ id: null, nome: '', valor: 0, localizacao: '', descricao: '', images: [], tipo: 'Lote', status: 'DISPONÍVEL', detalhes: { quartos: 0, salas: 0, banheiros: 0, area: '', mobiliado: false, corretor_matricula: '' } });
                                       await loadApplicationData();
                                     } else {
                                       const body = await res.json();

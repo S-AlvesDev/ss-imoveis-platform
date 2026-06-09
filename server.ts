@@ -37,6 +37,7 @@ async function getTransporter() {
 }
 
 import { supabaseServer } from './src/lib/supabaseServer.ts';
+import blogRouter from './src/lib/blog-router.ts';
 
 // Fix for fetch redefinition error in some environments
 const dom = new JSDOM('', { url: 'http://localhost' });
@@ -50,6 +51,7 @@ function sanitizeProperty(p: any) {
   let actualDesc = originalDesc;
   let images: string[] = [];
   let tipo = 'Lote'; // default value
+  let detalhes: any = { quartos: 0, salas: 0, banheiros: 0, area: '', mobiliado: false };
 
   // 1. Parse Image URLs
   if (p.images) {
@@ -85,9 +87,18 @@ function sanitizeProperty(p: any) {
       } catch (e) {}
   }
 
-  // 2. Parse Type (TIPO) and clean description
+  // 2. Parse Type (TIPO), DETAILS and clean description
   if (typeof originalDesc === 'string') {
       let baseText = originalDesc.split('|||IMAGES:')[0];
+      
+      if (baseText.includes('|||DETAILS:')) {
+          const detailParts = baseText.split('|||DETAILS:');
+          try {
+              detalhes = JSON.parse(detailParts[1]);
+          } catch(e) {}
+          baseText = detailParts[0];
+      }
+
       if (baseText.includes('|||TIPO:')) {
           const parts = baseText.split('|||TIPO:');
           actualDesc = parts[0];
@@ -113,7 +124,8 @@ function sanitizeProperty(p: any) {
     ...p,
     descricao: actualDesc,
     images: images.filter(Boolean),
-    tipo: tipo || 'Lote'
+    tipo: tipo || 'Lote',
+    detalhes
   };
 }
 
@@ -145,6 +157,79 @@ async function startServer() {
   app.use(express.json());
   
   app.use('/api/atendimento', atendimentoRouter);
+  app.use('/api/blog', blogRouter);
+
+  // Serve static blog images
+  app.use('/assets/blog', express.static(path.join(process.cwd(), 'public/assets/blog')));
+
+  // Robots.txt
+  app.get('/robots.txt', (req, res) => {
+     res.type('text/plain');
+     res.send(`User-agent: *\nAllow: /\nSitemap: https://${req.get('host')}/sitemap.xml`);
+  });
+
+  // Dynamic Sitemap
+  app.get('/sitemap.xml', async (req, res) => {
+      try {
+         const { data } = await supabaseServer.from('blog_posts').select('slug, atualizado_em').eq('status', 'Publicado');
+         let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
+         // Main pages
+         xml += `  <url>\n    <loc>https://${req.get('host')}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
+         xml += `  <url>\n    <loc>https://${req.get('host')}/blog</loc>\n    <changefreq>daily</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
+         // Blog posts
+         if (data) {
+             data.forEach((p: any) => {
+                 xml += `  <url>\n    <loc>https://${req.get('host')}/blog/${p.slug}</loc>\n    <lastmod>${new Date(p.atualizado_em).toISOString()}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
+             });
+         }
+         xml += '</urlset>';
+         res.type('application/xml');
+         res.send(xml);
+      } catch (e) {
+         res.status(500).end();
+      }
+  });
+
+  // SEO SSR Interceptor for public blog routes
+  app.get('/blog/:slug', async (req, res, next) => {
+    if (process.env.NODE_ENV !== 'production') return next();
+    
+    try {
+      const { slug } = req.params;
+      const { data } = await supabaseServer.from('blog_posts').select('titulo, subtitulo, imagem_capa').eq('slug', slug).maybeSingle();
+      
+      const filePath = path.resolve(process.cwd(), 'dist', 'index.html');
+      if (!fs.existsSync(filePath)) return next();
+      
+      let html = fs.readFileSync(filePath, 'utf-8');
+      
+      if (data) {
+        const url = `https://` + req.get('host') + `/blog/${slug}`;
+        const title = `${data.titulo} | Blog SS Imobiliária`;
+        const description = data.subtitulo || `Leia sobre ${data.titulo} em nosso blog.`;
+        const imageUrl = data.imagem_capa || 'https://i.imgur.com/8Q5gQhx.jpeg';
+        
+        // Add Open Graph tags right before </head>
+        const metaTags = `
+          <meta name="description" content="${description}">
+          <meta property="og:title" content="${title}">
+          <meta property="og:description" content="${description}">
+          <meta property="og:image" content="${imageUrl}">
+          <meta property="og:url" content="${url}">
+          <meta property="og:type" content="article">
+          <meta name="twitter:card" content="summary_large_image">
+          <title>${title}</title>
+        `;
+        
+        html = html.replace('</head>', metaTags + '</head>');
+      }
+      
+      res.send(html);
+    } catch (e) {
+      console.error('Error generating SEO tags:', e);
+      next(); // fallback to normal SPA serving
+    }
+  });
 
   // Socket.io Setup
   const io = new Server(server, {
@@ -871,16 +956,19 @@ async function startServer() {
 
   app.post('/api/properties', upload.any(), async (req, res) => {
     try {
-      const { nome, valor, localizacao, descricao, tipo, imagemSelecionada } = req.body;
+      const { nome, valor, localizacao, descricao, tipo, images, detalhes } = req.body;
       
-      const imageUrls: string[] = [];
-      if (imagemSelecionada) {
-         imageUrls.push(imagemSelecionada);
-      }
+      let imageUrls: string[] = [];
+      try {
+         if (images) imageUrls = JSON.parse(images);
+      } catch(e) {}
       
       let finalDesc = (descricao || 'Sem descrição detalhada');
       if (tipo) {
          finalDesc += '|||TIPO:' + tipo;
+      }
+      if (detalhes) {
+         finalDesc += '|||DETAILS:' + detalhes; // detalhes comes as JSON string from client
       }
       if (imageUrls.length > 0) {
          finalDesc += '|||IMAGES:' + JSON.stringify(imageUrls);
@@ -908,28 +996,37 @@ async function startServer() {
   app.put('/api/properties/:id', upload.any(), async (req, res) => {
     try {
       const { id } = req.params;
-      const { nome, valor, localizacao, descricao, tipo, imagemSelecionada } = req.body;
+      const { nome, valor, localizacao, descricao, tipo, images, detalhes, status } = req.body;
       
       let imageUrls: string[] = [];
-      if (imagemSelecionada) {
-         imageUrls.push(imagemSelecionada);
-      }
+      try {
+         if (images) imageUrls = JSON.parse(images);
+      } catch(e) {}
       
       let finalDesc = descricao || '';
       if (tipo) {
          finalDesc += '|||TIPO:' + tipo;
       }
+      if (detalhes) {
+         finalDesc += '|||DETAILS:' + detalhes;
+      }
       if (imageUrls.length > 0) {
          finalDesc += '|||IMAGES:' + JSON.stringify(imageUrls);
       }
 
-      const { data: updatedProperty, error } = await supabaseServer.from('properties').update({
+      const updateData: any = {
          nome, 
          valor: Number(valor), 
          localizacao, 
          descricao: finalDesc,
          images: imageUrls
-      }).eq('id', Number(id)).select().maybeSingle();
+      };
+
+      if (status) {
+         updateData.status = status;
+      }
+
+      const { data: updatedProperty, error } = await supabaseServer.from('properties').update(updateData).eq('id', Number(id)).select().maybeSingle();
 
       if (error) return res.status(500).json({ error: error.message });
       if (!updatedProperty) return res.status(404).json({ error: 'Imóvel não encontrado.' });
