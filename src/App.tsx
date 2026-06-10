@@ -503,11 +503,13 @@ export default function App() {
       <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans">
         <main className="flex-1">
           {/* HERO & LOGIN SECTION */}
-          <section className="relative min-h-screen md:min-h-[85vh] flex flex-col items-center justify-center p-4 bg-gradient-to-br from-[#1d2d3d] to-[#121c26] text-white">
-            <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-20 hidden md:block">
-              <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] rounded-full bg-blue-500 blur-[120px]" />
-              <div className="absolute bottom-[0%] -right-[10%] w-[50%] h-[50%] rounded-full bg-teal-500 blur-[120px]" />
-            </div>
+          <section className="relative min-h-screen md:min-h-[85vh] flex flex-col items-center justify-center p-4 text-white">
+            <img 
+              src="https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&q=80&w=1920&h=1080" 
+              alt="Frente da Imobiliária São Severino" 
+              className="absolute inset-0 z-0 w-full h-full object-cover pointer-events-none select-none"
+              referrerPolicy="no-referrer"
+            />
             
             <div className="z-10 w-full max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
               <div className="hidden md:block space-y-6">
