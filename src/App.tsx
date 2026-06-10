@@ -504,22 +504,17 @@ export default function App() {
         <main className="flex-1">
           {/* HERO & LOGIN SECTION */}
           <section className="relative min-h-screen md:min-h-[85vh] flex flex-col items-center justify-center p-4 text-white">
-            <img 
-              src="https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&q=80&w=1920&h=1080" 
-              alt="Frente da Imobiliária São Severino" 
+            <video
+              src="/Video_Da_Frente_Da_mobiliaria.mp4"
+              autoPlay
+              loop
+              muted
+              playsInline
               className="absolute inset-0 z-0 w-full h-full object-cover pointer-events-none select-none"
-              referrerPolicy="no-referrer"
             />
             
             <div className="z-10 w-full max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-              <div className="hidden md:block space-y-6">
-                <h1 className="text-4xl lg:text-6xl font-bold tracking-tight">Imobiliária SãoSeverino</h1>
-                <p className="text-xl text-gray-300">Gestão inteligente. Soluções completas para seu negócio imobiliário.</p>
-                <div className="pt-4 flex gap-4">
-                  <span className="flex items-center gap-2 text-sm font-medium"><CheckCircle2 className="w-5 h-5 text-blue-400"/> Inovação</span>
-                  <span className="flex items-center gap-2 text-sm font-medium"><CheckCircle2 className="w-5 h-5 text-blue-400"/> Confiança</span>
-                </div>
-              </div>
+              <div className="hidden md:block"></div>
 
               <div className="flex justify-center md:justify-end">
                 <motion.div 
